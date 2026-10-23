@@ -3,329 +3,537 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0e13">
-<meta name="description" content="S2M — Scan to Model. Capture overlapping camera views to prepare objects for 3D reconstruction.">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="S2M — Scan to Model. Capture objects and organize scanning sessions for 3D reconstruction.">
 <title>S2M — Scan to Model</title>
 <style>
 :root {
   color-scheme: dark;
-  --bg: #0b0e13;
-  --panel: #121720;
-  --panel2: #191f2a;
-  --border: #293242;
-  --text: #edf2fa;
-  --muted: #96a2b5;
-  --accent: #a3e635;
-  --cyan: #67e8f9;
-  --danger: #fb7185;
+  --black: #000000;
+  --white: #ffffff;
+  --gray: #888888;
+  --dark-gray: #242424;
+  --green: #a3e635;
 }
 * { box-sizing: border-box; }
+html { background: var(--black); }
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--black);
+  color: var(--white);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
-button, select { font: inherit; }
+button, input, select { font: inherit; }
 button {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--black);
+  color: var(--white);
+  border: 1px solid var(--dark-gray);
   padding: 12px 15px;
-  color: var(--text);
-  background: var(--panel2);
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 650;
-  transition: background .15s, transform .15s;
+  font-weight: 600;
+  transition: border-color .15s, background .15s, opacity .15s;
 }
-button:active { transform: scale(.98); }
-button:disabled { opacity: .4; cursor: not-allowed; }
-button.primary { background: var(--accent); color: #17200a; border-color: var(--accent); }
-button.danger { color: var(--danger); }
+button:hover:not(:disabled) { border-color: var(--gray); }
+button:disabled { opacity: .35; cursor: not-allowed; }
 button:focus-visible, select:focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: 2px solid var(--green);
   outline-offset: 3px;
 }
+button.primary {
+  background: var(--white);
+  color: var(--black);
+  border-color: var(--white);
+}
+button.primary:hover:not(:disabled) {
+  background: var(--green);
+  border-color: var(--green);
+}
+button.green {
+  background: var(--green);
+  color: var(--black);
+  border-color: var(--green);
+}
+button.danger { color: var(--white); }
 header {
+  height: 65px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--dark-gray);
+  background: var(--black);
   position: sticky;
   top: 0;
-  z-index: 5;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 15px max(16px, env(safe-area-inset-left));
-  background: #0b0e13ed;
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(18px);
+  z-index: 10;
 }
 .brand { display: flex; align-items: center; gap: 11px; }
-.logo {
-  width: 40px; height: 40px; border-radius: 12px;
-  display: grid; place-items: center;
-  color: var(--accent); background: #a3e63513;
-  border: 1px solid #a3e63555; font-weight: 900; font-size: 18px;
+.brand-mark {
+  height: 34px;
+  width: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gray);
+  border-radius: 8px;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: -1px;
 }
-.brand h1 { font-size: 17px; margin: 0; letter-spacing: -.4px; }
-.brand p { font-size: 11px; color: var(--muted); margin: 3px 0 0; }
-.version {
-  color: var(--accent); border: 1px solid #a3e63555;
-  border-radius: 8px; padding: 5px 8px; font-size: 11px;
+.brand-name { font-size: 15px; font-weight: 750; letter-spacing: -.4px; }
+.brand-sub { font-size: 10px; color: var(--gray); margin-top: 3px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.pill {
+  font-size: 10px;
+  color: var(--gray);
+  border: 1px solid var(--dark-gray);
+  border-radius: 5px;
+  padding: 5px 7px;
 }
-main { width: min(100%, 1000px); margin: auto; padding: 22px 15px 50px; }
-.intro { margin-bottom: 22px; }
-.eyebrow { color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: 2px; }
-h2 { font-size: clamp(25px, 6vw, 36px); letter-spacing: -1px; margin: 7px 0; }
-.intro p, .muted { color: var(--muted); font-size: 13px; line-height: 1.65; }
-.panel {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: 18px; overflow: hidden; margin-bottom: 17px;
+main { width: min(1180px, 100%); margin: auto; padding: 28px 20px 70px; }
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
 }
-.panel-head {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 10px; padding: 15px 16px; border-bottom: 1px solid var(--border);
+.eyebrow {
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
 }
-.panel-head h3 { margin: 0; font-size: 14px; }
-.status {
-  display: flex; align-items: center; gap: 7px;
-  color: var(--muted); font-size: 11px;
+h1 {
+  font-size: clamp(28px, 5vw, 43px);
+  line-height: 1.1;
+  letter-spacing: -2px;
+  margin: 9px 0;
 }
-.dot { width: 7px; height: 7px; background: #667085; border-radius: 50%; }
-.dot.live { background: var(--accent); box-shadow: 0 0 10px #a3e65599; }
+.subtitle {
+  max-width: 540px;
+  color: var(--gray);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.section-label h2 { margin: 0; font-size: 13px; font-weight: 700; }
+.section-label span { font-size: 11px; color: var(--gray); }
+.camera-shell {
+  border: 1px solid var(--dark-gray);
+  background: var(--black);
+  border-radius: 12px;
+  overflow: hidden;
+}
 .camera {
-  position: relative; background: #05070a;
-  width: 100%; aspect-ratio: 4 / 3; max-height: 60vh;
-  overflow: hidden; display: grid; place-items: center;
+  background: var(--black);
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 70vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
-video { width: 100%; height: 100%; object-fit: contain; display: none; }
-.camera.active video { display: block; }
-.camera.active .placeholder { display: none; }
-.placeholder { text-align: center; padding: 25px; color: var(--muted); }
-.camera-icon { font-size: 42px; margin-bottom: 10px; }
-.placeholder strong { color: var(--text); display: block; margin-bottom: 7px; }
-.placeholder p { font-size: 12px; line-height: 1.6; max-width: 260px; margin: auto; }
-.camera-grid {
-  position: absolute; inset: 0; pointer-events: none;
-  opacity: .25;
-  background-image:
-    linear-gradient(to right, transparent 49.8%, #d8e3f0 50%, transparent 50.2%),
-    linear-gradient(to bottom, transparent 49.8%, #d8e3f0 50%, transparent 50.2%);
+video#liveVideo {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
-.camera.active .camera-grid { display: block; }
-.camera:not(.active) .camera-grid { display: none; }
-.reticle {
-  position: absolute; inset: 14%;
-  border: 1px solid #a3e63575; border-radius: 10px;
-  pointer-events: none;
+.camera.active video#liveVideo { display: block; }
+.camera-placeholder { padding: 24px; text-align: center; }
+.camera.active .camera-placeholder { display: none; }
+.camera-placeholder .symbol {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--dark-gray);
+  border-radius: 12px;
+  font-size: 24px;
 }
-.camera:not(.active) .reticle { display: none; }
-.camera-foot {
-  display: flex; flex-wrap: wrap; justify-content: space-between;
-  gap: 10px; padding: 12px 15px; color: var(--muted); font-size: 11px;
+.camera-placeholder strong { font-size: 15px; }
+.camera-placeholder p {
+  color: var(--gray);
+  max-width: 290px;
+  margin: 9px auto 0;
+  font-size: 12px;
+  line-height: 1.7;
 }
-.controls { padding: 15px; display: grid; gap: 10px; }
-.button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-.button-row button { min-height: 47px; }
-label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 7px; }
+.rec-indicator {
+  display: none;
+  position: absolute;
+  top: 13px;
+  left: 13px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--white);
+  background: var(--black);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+}
+.rec-indicator.active { display: flex; }
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.camera-counter {
+  position: absolute;
+  right: 12px;
+  top: 13px;
+  background: var(--black);
+  border: 1px solid var(--dark-gray);
+  padding: 7px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  color: var(--white);
+}
+.camera-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 13px;
+  border-top: 1px solid var(--dark-gray);
+  font-size: 11px;
+  color: var(--gray);
+}
+.live-status { color: var(--gray); }
+.live-status.on { color: var(--green); }
+.controls { padding-top: 13px; display: grid; gap: 10px; }
+.button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.button-row button { min-height: 48px; }
 select {
-  width: 100%; padding: 12px; color: var(--text);
-  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+  width: 100%;
+  background: var(--black);
+  color: var(--white);
+  border: 1px solid var(--dark-gray);
+  border-radius: 8px;
+  padding: 11px;
 }
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 17px; }
-.stat { padding: 14px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 13px; }
-.stat strong { font-size: 22px; display: block; letter-spacing: -.5px; }
-.stat span { font-size: 10px; color: var(--muted); display: block; margin-top: 4px; }
-.section-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 22px 0 12px; }
-.section-title h3 { font-size: 15px; margin: 0; }
-.section-title span { font-size: 11px; color: var(--muted); }
-.frames { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.frame {
-  min-width: 0; background: var(--panel); border: 1px solid var(--border);
-  border-radius: 13px; overflow: hidden;
-}
-.frame img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; display: block; background: #080b10; }
-.frame-info { padding: 10px; }
-.frame-info strong { font-size: 12px; display: block; }
-.frame-info small { color: var(--muted); display: block; font-size: 10px; margin: 4px 0 9px; }
-.frame-actions { display: flex; gap: 6px; }
-.frame-actions button { padding: 8px 5px; flex: 1; font-size: 10px; border-radius: 8px; }
-.empty {
-  padding: 28px 15px; text-align: center; color: var(--muted);
-  border: 1px dashed var(--border); border-radius: 14px; font-size: 12px; line-height: 1.7;
-}
-.hidden { display: none !important; }
+.field-label { display: block; font-size: 11px; color: var(--gray); margin-bottom: 7px; }
+.settings { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.hint { font-size: 11px; color: var(--gray); line-height: 1.7; margin: 2px 0; }
 .notice {
-  padding: 13px; margin-bottom: 15px; border-radius: 12px;
-  border: 1px solid #67e8f944; background: #67e8f90b;
-  color: #b9eaf2; font-size: 12px; line-height: 1.6;
+  display: none;
+  border: 1px solid var(--dark-gray);
+  border-radius: 8px;
+  padding: 12px 13px;
+  font-size: 12px;
+  line-height: 1.65;
+  margin-bottom: 15px;
+  color: var(--white);
+  background: var(--black);
 }
-.notice.error { border-color: #fb718555; background: #fb71850b; color: #fecdd3; }
-.notice.success { border-color: #a3e63555; background: #a3e6350b; color: #d9f99d; }
-footer { text-align: center; padding: 25px 10px; color: #667085; font-size: 11px; line-height: 1.7; }
-@media (min-width: 700px) {
-  main { padding: 30px 24px 60px; }
-  .workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(240px, .8fr); gap: 16px; align-items: start; }
-  .workspace .panel { margin-bottom: 0; }
-  .frames { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.notice.show { display: block; }
+.notice.good { border-color: var(--green); }
+.notice.bad { border-color: var(--gray); }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--dark-gray);
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+.stat { padding: 15px 12px; min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--dark-gray); }
+.stat strong { font-size: clamp(17px, 4vw, 24px); display: block; letter-spacing: -1px; overflow-wrap: anywhere; }
+.stat span { display: block; color: var(--gray); font-size: 9px; letter-spacing: .7px; margin-top: 5px; }
+.projects-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 35px 0 14px;
+}
+.projects-head h2 { font-size: 18px; letter-spacing: -.5px; margin: 0; }
+.projects-head p { font-size: 11px; color: var(--gray); margin: 5px 0 0; }
+.project-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.project {
+  border: 1px solid var(--dark-gray);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+.project-video {
+  background: var(--black);
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+}
+.project-video video { width: 100%; height: 100%; object-fit: contain; }
+.project-video .no-video { color: var(--gray); font-size: 12px; padding: 20px; text-align: center; }
+.project-info { padding: 14px; }
+.project-title-row { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.project-title-row strong { font-size: 13px; overflow-wrap: anywhere; }
+.project-tag {
+  font-size: 9px;
+  border: 1px solid var(--dark-gray);
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--gray);
+  white-space: nowrap;
+}
+.project-meta { color: var(--gray); font-size: 11px; margin-top: 7px; line-height: 1.6; }
+.project-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.project-actions button { font-size: 10px; padding: 9px 10px; }
+.empty {
+  border: 1px dashed var(--dark-gray);
+  border-radius: 10px;
+  text-align: center;
+  padding: 34px 16px;
+  color: var(--gray);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.empty strong { display: block; color: var(--white); margin-bottom: 5px; font-size: 13px; }
+.footer {
+  border-top: 1px solid var(--dark-gray);
+  margin-top: 48px;
+  padding-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--gray);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.footer strong { color: var(--white); }
+@media (min-width: 800px) {
+  header { padding: 0 32px; }
+  main { padding: 42px 32px 80px; }
+  .layout { grid-template-columns: minmax(0, 1.65fr) minmax(260px, .75fr); align-items: start; gap: 30px; }
+  .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .camera { aspect-ratio: 4 / 3; }
+}
+@media (max-width: 380px) {
+  header { padding: 0 12px; }
+  main { padding: 22px 12px 55px; }
+  .pill { display: none; }
+  .button-row { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
 <header>
   <div class="brand">
-    <div class="logo">S2M</div>
+    <div class="brand-mark">S2M</div>
     <div>
-      <h1>Scan to Model</h1>
-      <p>REAL-WORLD OBJECT CAPTURE</p>
+      <div class="brand-name">Scan to Model</div>
+      <div class="brand-sub">SPATIAL CAPTURE WORKSPACE</div>
     </div>
   </div>
-  <span class="version">PROTOTYPE 0.1</span>
+  <div class="header-right">
+    <span class="pill">DARK MODE</span>
+    <span class="pill">S2M</span>
+  </div>
 </header>
 
 <main>
-  <section class="intro">
-    <div class="eyebrow">SPATIAL CAPTURE LAB</div>
-    <h2>Every angle matters.</h2>
-    <p>Capture overlapping views of an object. Build a collection of reference frames for the upcoming 3D reconstruction engine.</p>
-  </section>
-
-  <div id="notice" class="notice" role="status" aria-live="polite">
-    Ready to scan. Allow camera access to begin. Use a well-lit object with a textured, non-reflective surface for best results.
+  <div class="topline">
+    <div>
+      <div class="eyebrow">WORKSPACE / SCANNER</div>
+      <h1>Capture reality.</h1>
+      <p class="subtitle">Record an object from multiple angles. S2M automatically samples frames and organizes each scan into a single project, ready for the 3D reconstruction workflow.</p>
+    </div>
   </div>
+
+  <div id="notice" class="notice" role="status" aria-live="polite"></div>
 
   <div class="stats">
-    <div class="stat"><strong id="frameCount">0</strong><span>CAPTURED FRAMES</span></div>
-    <div class="stat"><strong id="resolution">—</strong><span>CAMERA RESOLUTION</span></div>
-    <div class="stat"><strong id="sessionState">READY</strong><span>SESSION STATUS</span></div>
+    <div class="stat"><strong id="projectCount">0</strong><span>SCAN PROJECTS</span></div>
+    <div class="stat"><strong id="totalFrames">0</strong><span>SAMPLED FRAMES</span></div>
+    <div class="stat"><strong id="workspaceStatus">READY</strong><span>WORKSPACE STATUS</span></div>
   </div>
 
-  <div class="workspace">
-    <section class="panel">
-      <div class="panel-head">
-        <h3>01 / Camera viewport</h3>
-        <div class="status"><span id="liveDot" class="dot"></span><span id="liveLabel">Camera offline</span></div>
+  <div class="layout">
+    <section>
+      <div class="section-label">
+        <h2>01 / Live camera</h2>
+        <span id="cameraState">Camera offline</span>
       </div>
-      <div id="camera" class="camera">
-        <video id="video" autoplay muted playsinline></video>
-        <div class="placeholder">
-          <div class="camera-icon">◎</div>
-          <strong>Your camera, your scanner.</strong>
-          <p>Start the camera, keep your object in view, and capture frames as you move around it.</p>
+      <div class="camera-shell">
+        <div id="camera" class="camera">
+          <video id="liveVideo" autoplay muted playsinline></video>
+          <div class="camera-placeholder">
+            <div class="symbol">◎</div>
+            <strong>Camera viewport</strong>
+            <p>Start your scan to activate the camera. Keep the object in view and move slowly around it.</p>
+          </div>
+          <div id="recIndicator" class="rec-indicator">
+            <span class="rec-dot"></span><span>RECORDING</span>
+          </div>
+          <div id="cameraCounter" class="camera-counter">0 frames</div>
         </div>
-        <div class="camera-grid"></div>
-        <div class="reticle"></div>
+        <div class="camera-bottom">
+          <span id="liveStatus" class="live-status">No active camera</span>
+          <span id="timer">00:00</span>
+        </div>
       </div>
-      <div class="camera-foot">
-        <span id="cameraHint">No active camera</span>
-        <span>RGB · Untextured workflow</span>
-      </div>
+
       <div class="controls">
-        <div>
-          <label for="cameraSelect">Camera device</label>
-          <select id="cameraSelect" aria-label="Choose camera">
-            <option value="">Default camera</option>
-          </select>
-        </div>
         <div class="button-row">
-          <button id="startBtn" class="primary">▶ Start camera</button>
-          <button id="stopBtn" disabled>■ Stop camera</button>
+          <button id="startCamera" class="primary">Start camera</button>
+          <button id="stopCamera" disabled>Stop camera</button>
         </div>
-        <button id="captureBtn" class="primary" disabled>◎ Capture frame</button>
-        <div class="muted">Move slowly between captures. Keep the entire object visible and overlap neighboring views.</div>
+        <button id="startScan" class="green" disabled>Start scan recording</button>
+        <button id="stopScan" disabled>Stop and save scan</button>
+        <p class="hint">Starting a scan begins video recording and automatic frame sampling every second. Stop the scan to create a project. Keep the object stationary and move the camera around it.</p>
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h3>02 / Scan session</h3>
-        <span class="status" id="sessionLabel">Not started</span>
+    <aside>
+      <div class="section-label">
+        <h2>02 / Capture settings</h2>
+        <span>LIVE</span>
       </div>
-      <div class="controls">
-        <div class="notice">
-          <strong>Capture guidance</strong><br>
-          • Keep the object stationary.<br>
-          • Move the camera around the object.<br>
-          • Capture overlapping views from several sides.<br>
-          • Include higher and lower viewing angles.<br>
-          • Avoid blur, glare, and sudden movement.
+      <div class="camera-shell" style="padding:15px">
+        <div class="settings">
+          <div>
+            <label class="field-label" for="cameraSelect">Camera device</label>
+            <select id="cameraSelect">
+              <option value="">Default / rear camera</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="sampleRate">Automatic sampling</label>
+            <select id="sampleRate">
+              <option value="1000">Every 1 second</option>
+              <option value="1500">Every 1.5 seconds</option>
+              <option value="2000">Every 2 seconds</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="quality">Video quality</label>
+            <select id="quality">
+              <option value="720">HD · 720p target</option>
+              <option value="1080">Full HD · 1080p target</option>
+            </select>
+          </div>
         </div>
-        <button id="newSessionBtn">＋ New scan session</button>
-        <button id="downloadAllBtn" disabled>↓ Download captured frames</button>
-        <button id="clearBtn" class="danger" disabled>Clear captured frames</button>
-        <p class="muted">Frames stay in this browser session until you clear them or close/reload the page. Download important captures before leaving.</p>
+        <div style="height:1px;background:var(--dark-gray);margin:18px 0"></div>
+        <div class="eyebrow">SCAN GUIDELINES</div>
+        <p class="hint">01. Use even lighting.</p>
+        <p class="hint">02. Keep the entire object in view.</p>
+        <p class="hint">03. Move slowly and smoothly.</p>
+        <p class="hint">04. Capture overlapping viewpoints.</p>
+        <p class="hint">05. Include different heights.</p>
+        <p class="hint">06. Avoid reflective or transparent surfaces when possible.</p>
+        <div style="height:1px;background:var(--dark-gray);margin:18px 0"></div>
+        <div class="eyebrow">RECONSTRUCTION STATUS</div>
+        <p class="hint">Frame collection is enabled. Photogrammetry, mesh reconstruction, and GLB export will require the dedicated 3D reconstruction engine.</p>
       </div>
-    </section>
+    </aside>
   </div>
 
-  <div class="section-title">
-    <h3>03 / Captured frames</h3>
-    <span id="galleryCount">0 images</span>
+  <div class="projects-head">
+    <div>
+      <h2>Scan projects</h2>
+      <p>Each recording is stored as one project.</p>
+    </div>
+    <button id="clearProjects" disabled>Clear all</button>
   </div>
-  <div id="gallery" class="frames"></div>
-  <div id="emptyState" class="empty">
-    No frames captured yet.<br>
-    Start the camera and capture your first view.
+  <div id="projects" class="project-grid"></div>
+  <div id="empty" class="empty">
+    <strong>No scan projects yet</strong>
+    Your completed recordings will appear here, each with its own video and frame collection.
   </div>
 
-  <footer>
-    <strong>S2M — Scan to Model</strong><br>
-    Prototype 0.1 · Camera capture foundation<br>
-    3D reconstruction, mesh generation, and GLB export are not implemented in this version.
-  </footer>
+  <div class="footer">
+    <div><strong>S2M</strong><br>Scan to Model</div>
+    <div style="text-align:right">Local browser workspace<br>Dark interface · Automatic capture</div>
+  </div>
 </main>
 
-<canvas id="captureCanvas" class="hidden"></canvas>
+<canvas id="frameCanvas" hidden></canvas>
 
 <script>
 (() => {
   "use strict";
 
   const $ = id => document.getElementById(id);
-  const video = $("video");
-  const canvas = $("captureCanvas");
+  const liveVideo = $("liveVideo");
+  const canvas = $("frameCanvas");
   const ctx = canvas.getContext("2d", { alpha: false });
-  const camera = $("camera");
 
   let stream = null;
-  let frames = [];
-  let sessionNumber = 1;
-  let sessionStarted = false;
-  let nextFrameId = 1;
+  let recorder = null;
+  let chunks = [];
+  let sampleTimer = null;
+  let clockTimer = null;
+  let scanStartedAt = 0;
+  let elapsedBeforeStop = 0;
+  let scanFrames = [];
+  let projects = [];
+  let projectId = 1;
+  let scanActive = false;
   let busy = false;
+  let lastSavedScan = false;
+  let notificationTimer = null;
 
-  function message(text, type = "") {
+  function notify(text, type = "good") {
     const el = $("notice");
     el.textContent = text;
-    el.className = "notice" + (type ? " " + type : "");
+    el.className = "notice show " + type;
+    clearTimeout(notificationTimer);
+    notificationTimer = setTimeout(() => el.classList.remove("show"), 6500);
+  }
+
+  function fmtTime(seconds) {
+    seconds = Math.max(0, Math.floor(seconds));
+    return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" +
+      String(seconds % 60).padStart(2, "0");
+  }
+
+  function currentDuration() {
+    return scanActive
+      ? elapsedBeforeStop + (Date.now() - scanStartedAt) / 1000
+      : elapsedBeforeStop;
   }
 
   function updateStats() {
-    $("frameCount").textContent = frames.length;
-    $("galleryCount").textContent = frames.length + (frames.length === 1 ? " image" : " images");
-    $("sessionState").textContent = sessionStarted ? "ACTIVE" : "READY";
-    $("sessionLabel").textContent = sessionStarted ? "Session " + sessionNumber : "Not started";
-    $("downloadAllBtn").disabled = frames.length === 0;
-    $("clearBtn").disabled = frames.length === 0;
-    $("emptyState").classList.toggle("hidden", frames.length > 0);
-    $("gallery").classList.toggle("hidden", frames.length === 0);
+    $("projectCount").textContent = projects.length;
+    $("totalFrames").textContent = projects.reduce((n, p) => n + p.frames.length, 0)
+      + scanFrames.length;
+    $("workspaceStatus").textContent = scanActive ? "SCANNING" : (stream ? "ONLINE" : "READY");
+    $("cameraCounter").textContent = scanFrames.length + " frames";
+    $("clearProjects").disabled = projects.length === 0;
   }
 
-  function updateCameraUI(active) {
-    camera.classList.toggle("active", active);
-    $("liveDot").classList.toggle("live", active);
-    $("liveLabel").textContent = active ? "Camera live" : "Camera offline";
-    $("cameraHint").textContent = active
-      ? video.videoWidth + " × " + video.videoHeight + " px"
-      : "No active camera";
-    $("startBtn").disabled = active || busy;
-    $("stopBtn").disabled = !active || busy;
-    $("captureBtn").disabled = !active || busy;
-    $("resolution").textContent = active
-      ? video.videoWidth + "×" + video.videoHeight
-      : "—";
+  function updateCameraUI() {
+    const active = !!stream;
+    $("camera").classList.toggle("active", active);
+    $("cameraState").textContent = scanActive ? "Recording" : (active ? "Camera ready" : "Camera offline");
+    $("liveStatus").textContent = scanActive ? "Recording · Auto capture active" : (active ? "Camera ready" : "No active camera");
+    $("liveStatus").classList.toggle("on", scanActive || active);
+    $("recIndicator").classList.toggle("active", scanActive);
+    $("startCamera").disabled = active || busy;
+    $("stopCamera").disabled = !active || scanActive || busy;
+    $("startScan").disabled = !active || scanActive || busy;
+    $("stopScan").disabled = !scanActive || busy;
+    $("timer").textContent = fmtTime(currentDuration());
+    updateStats();
   }
 
-  async function populateCameras() {
+  async function refreshCameras() {
     if (!navigator.mediaDevices?.enumerateDevices) return;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -333,219 +541,391 @@ footer { text-align: center; padding: 25px 10px; color: #667085; font-size: 11px
       const select = $("cameraSelect");
       const previous = select.value;
       select.replaceChildren();
-      cameras.forEach((device, index) => {
+      const fallback = document.createElement("option");
+      fallback.value = "";
+      fallback.textContent = "Default / rear camera";
+      select.appendChild(fallback);
+      cameras.forEach((device, i) => {
         const option = document.createElement("option");
         option.value = device.deviceId;
-        option.textContent = device.label || ("Camera " + (index + 1));
+        option.textContent = device.label || "Camera " + (i + 1);
         select.appendChild(option);
       });
-      if (cameras.length === 0) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "Default camera";
-        select.appendChild(option);
-      } else if (cameras.some(d => d.deviceId === previous)) {
-        select.value = previous;
-      }
-    } catch (_) {
-      // Camera selection is optional; the default camera can still work.
-    }
-  }
-
-  async function stopCamera() {
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    stream = null;
-    video.srcObject = null;
-    updateCameraUI(false);
+      if (cameras.some(d => d.deviceId === previous)) select.value = previous;
+    } catch (_) {}
   }
 
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      message("Camera access is unavailable. Open S2M using HTTPS on Vercel, or use localhost during development. Ordinary HTTP pages cannot access the camera.", "error");
+      notify("Camera access requires HTTPS. Open your deployed Vercel URL or use localhost.", "bad");
       return;
     }
+    if (busy || scanActive) return;
     busy = true;
-    $("startBtn").disabled = true;
+    updateCameraUI();
     try {
-      await stopCamera();
+      await stopCameraTracks();
       const deviceId = $("cameraSelect").value;
-      const videoConstraints = deviceId
-        ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-        : { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } };
-
+      const height = Number($("quality").value);
+      const videoConstraints = {
+        width: { ideal: height === 1080 ? 1920 : 1280 },
+        height: { ideal: height },
+        ...(deviceId
+          ? { deviceId: { exact: deviceId } }
+          : { facingMode: { ideal: "environment" } })
+      };
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: videoConstraints
       });
-      video.srcObject = stream;
+      liveVideo.srcObject = stream;
       await new Promise((resolve, reject) => {
-        if (video.readyState >= 1 && video.videoWidth) return resolve();
-        video.onloadedmetadata = () => resolve();
-        video.onerror = () => reject(new Error("Camera video could not be loaded."));
+        if (liveVideo.readyState >= 1 && liveVideo.videoWidth) return resolve();
+        liveVideo.onloadedmetadata = resolve;
+        liveVideo.onerror = () => reject(new Error("The camera preview could not load."));
       });
-      await video.play();
-      updateCameraUI(true);
-      await populateCameras();
-      sessionStarted = true;
-      updateStats();
-      message("Camera ready. Frame capture is active. Slowly move around your object and capture overlapping views.", "success");
-    } catch (error) {
-      await stopCamera();
-      const errors = {
-        NotAllowedError: "Camera permission was denied. Allow camera access in your browser settings and try again.",
-        NotFoundError: "No available camera was found on this device.",
-        NotReadableError: "The camera may already be in use by another app. Close that app and retry.",
-        OverconstrainedError: "The selected camera is unavailable. Choose another camera or the default option."
+      await liveVideo.play();
+      await refreshCameras();
+      notify("Camera ready. Start a scan when your object is in view.");
+    } catch (err) {
+      await stopCameraTracks();
+      const explanations = {
+        NotAllowedError: "Camera permission was denied. Allow camera access in your browser settings.",
+        NotFoundError: "No compatible camera was found.",
+        NotReadableError: "The camera may be in use by another app. Close that app and retry.",
+        OverconstrainedError: "The selected camera or resolution is unavailable. Try another setting."
       };
-      message(errors[error.name] || ("Could not start the camera: " + (error.message || "Unknown error")), "error");
+      notify(explanations[err.name] || ("Could not start the camera: " + err.message), "bad");
     } finally {
       busy = false;
-      $("startBtn").disabled = !!stream;
-      $("stopBtn").disabled = !stream;
-      $("captureBtn").disabled = !stream;
+      updateCameraUI();
     }
   }
 
-  function downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  async function stopCameraTracks() {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = null;
+    liveVideo.srcObject = null;
   }
 
-  function renderGallery() {
-    const gallery = $("gallery");
-    gallery.replaceChildren();
-
-    frames.forEach(frame => {
-      const card = document.createElement("article");
-      card.className = "frame";
-
-      const img = document.createElement("img");
-      img.src = frame.url;
-      img.alt = "Captured scan frame " + frame.id;
-
-      const info = document.createElement("div");
-      info.className = "frame-info";
-
-      const title = document.createElement("strong");
-      title.textContent = "Frame " + String(frame.id).padStart(3, "0");
-
-      const meta = document.createElement("small");
-      meta.textContent = frame.width + " × " + frame.height + " px · Session " + frame.session;
-
-      const actions = document.createElement("div");
-      actions.className = "frame-actions";
-
-      const download = document.createElement("button");
-      download.textContent = "↓ Save image";
-      download.addEventListener("click", () => {
-        downloadBlob(frame.blob, "s2m-session-" + frame.session + "-frame-" + frame.id + ".jpg");
-      });
-
-      const remove = document.createElement("button");
-      remove.textContent = "Remove";
-      remove.addEventListener("click", () => {
-        URL.revokeObjectURL(frame.url);
-        frames = frames.filter(item => item.id !== frame.id);
-        renderGallery();
-        updateStats();
-      });
-
-      actions.append(download, remove);
-      info.append(title, meta, actions);
-      card.append(img, info);
-      gallery.appendChild(card);
-    });
+  function pickRecorderType() {
+    if (!window.MediaRecorder) return "";
+    const candidates = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm"
+    ];
+    return candidates.find(t => MediaRecorder.isTypeSupported(t)) || "";
   }
 
-  async function captureFrame() {
-    if (!stream || !video.videoWidth || busy) return;
-    busy = true;
-    $("captureBtn").disabled = true;
+  async function captureSample() {
+    if (!scanActive || !liveVideo.videoWidth || !liveVideo.videoHeight) return;
     try {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+      canvas.width = liveVideo.videoWidth;
+      canvas.height = liveVideo.videoHeight;
+      ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(result => {
-          if (result) resolve(result);
-          else reject(new Error("Could not create image."));
-        }, "image/jpeg", 0.94);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error("Image encoding failed")), "image/jpeg", 0.88);
       });
-
-      const frame = {
-        id: nextFrameId++,
-        session: sessionNumber,
+      if (!scanActive) return;
+      scanFrames.push({
+        id: scanFrames.length + 1,
+        blob,
         width: canvas.width,
         height: canvas.height,
-        blob,
-        url: URL.createObjectURL(blob)
-      };
-      frames.push(frame);
-      renderGallery();
-      updateStats();
-      message("Frame " + frame.id + " captured at " + frame.width + " × " + frame.height + ". Continue around the object, keeping views overlapping.", "success");
-    } catch (error) {
-      message("Capture failed: " + error.message, "error");
+        time: currentDuration()
+      });
+      $("cameraCounter").textContent = scanFrames.length + " frames";
+      $("totalFrames").textContent = projects.reduce((n, p) => n + p.frames.length, 0) + scanFrames.length;
+    } catch (err) {
+      console.error("Frame sampling failed:", err);
+    }
+  }
+
+  function startClock() {
+    clearInterval(clockTimer);
+    clockTimer = setInterval(() => {
+      $("timer").textContent = fmtTime(currentDuration());
+    }, 250);
+  }
+
+  function stopClock() {
+    clearInterval(clockTimer);
+    clockTimer = null;
+  }
+
+  async function startScan() {
+    if (!stream || scanActive || busy) return;
+    if (!window.MediaRecorder) {
+      notify("This browser does not support video recording. Try the latest version of Chrome.", "bad");
+      return;
+    }
+
+    busy = true;
+    updateCameraUI();
+    chunks = [];
+    scanFrames = [];
+    elapsedBeforeStop = 0;
+    lastSavedScan = false;
+
+    try {
+      const type = pickRecorderType();
+      recorder = type
+        ? new MediaRecorder(stream, { mimeType: type })
+        : new MediaRecorder(stream);
+
+      recorder.addEventListener("dataavailable", event => {
+        if (event.data && event.data.size) chunks.push(event.data);
+      });
+
+      recorder.addEventListener("error", event => {
+        notify("The recording encountered an error. Stop the scan and try again.", "bad");
+        console.error("MediaRecorder error:", event.error || event);
+      });
+
+      recorder.start(1000);
+      scanActive = true;
+      scanStartedAt = Date.now();
+      await captureSample();
+      sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+      startClock();
+      notify("Recording started. S2M is recording video and automatically capturing frames.", "good");
+    } catch (err) {
+      scanActive = false;
+      recorder = null;
+      notify("Could not start recording: " + err.message, "bad");
     } finally {
       busy = false;
-      $("captureBtn").disabled = !stream;
+      updateCameraUI();
     }
   }
 
-  function clearFrames() {
-    if (frames.length && !confirm("Delete all captured frames? Download any images you want to keep first.")) return;
-    frames.forEach(frame => URL.revokeObjectURL(frame.url));
-    frames = [];
-    renderGallery();
-    updateStats();
-    message("Captured frames cleared. Your camera can remain active for a new capture sequence.");
-  }
+  async function stopScan() {
+    if (!scanActive || busy) return;
+    busy = true;
+    updateCameraUI();
+    clearInterval(sampleTimer);
+    sampleTimer = null;
+    elapsedBeforeStop = currentDuration();
+    scanActive = false;
+    stopClock();
 
-  function newSession() {
-    if (frames.length && !confirm("Start a new session? Existing frames will remain in the gallery until you remove or download them.")) return;
-    sessionNumber++;
-    sessionStarted = true;
-    updateStats();
-    message("Session " + sessionNumber + " started. New captures will be labeled with this session number.", "success");
-  }
+    try {
+      const activeRecorder = recorder;
+      if (activeRecorder && activeRecorder.state !== "inactive") {
+        await new Promise(resolve => {
+          activeRecorder.addEventListener("stop", resolve, { once: true });
+          activeRecorder.stop();
+        });
+      }
 
-  $("startBtn").addEventListener("click", startCamera);
-  $("stopBtn").addEventListener("click", async () => {
-    await stopCamera();
-    message("Camera stopped. Captured frames are still available in the gallery.");
-  });
-  $("captureBtn").addEventListener("click", captureFrame);
-  $("clearBtn").addEventListener("click", clearFrames);
-  $("newSessionBtn").addEventListener("click", newSession);
-  $("cameraSelect").addEventListener("change", () => {
-    if (stream) startCamera();
-  });
+      // Allow any final image sample to finish before saving the project.
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-  $("downloadAllBtn").addEventListener("click", async () => {
-    if (!frames.length) return;
-    message("Preparing individual image downloads. Your browser may ask you to allow multiple downloads.");
-    for (let i = 0; i < frames.length; i++) {
-      const frame = frames[i];
-      downloadBlob(frame.blob, "s2m-session-" + frame.session + "-frame-" + frame.id + ".jpg");
-      await new Promise(resolve => setTimeout(resolve, 350));
+      const type = activeRecorder?.mimeType || "video/webm";
+      const videoBlob = new Blob(chunks, { type });
+      if (!videoBlob.size && scanFrames.length === 0) {
+        notify("This scan did not produce any usable video or frames.", "bad");
+        return;
+      }
+
+      const id = projectId++;
+      const project = {
+        id,
+        name: "Scan " + String(id).padStart(3, "0"),
+        createdAt: new Date(),
+        duration: elapsedBeforeStop,
+        videoBlob: videoBlob.size ? videoBlob : null,
+        videoType: type,
+        videoUrl: videoBlob.size ? URL.createObjectURL(videoBlob) : null,
+        frames: scanFrames.slice(),
+        width: liveVideo.videoWidth,
+        height: liveVideo.videoHeight
+      };
+
+      projects.unshift(project);
+      scanFrames = [];
+      chunks = [];
+      recorder = null;
+      elapsedBeforeStop = 0;
+      renderProjects();
+      updateCameraUI();
+
+      if (project.videoBlob) {
+        notify("Scan saved as " + project.name + ". Your video and " + project.frames.length + " sampled frames are grouped into one project.", "good");
+      } else {
+        notify("No video was recorded, but the sampled frames were saved to the project for this session.", "bad");
+      }
+    } catch (err) {
+      notify("Could not finish saving the scan: " + err.message, "bad");
+    } finally {
+      busy = false;
+      updateCameraUI();
     }
-    message("Download requests sent for " + frames.length + " frames. Check your browser's Downloads folder.", "success");
+  }
+
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function renderProjects() {
+    const container = $("projects");
+    container.replaceChildren();
+    $("empty").style.display = projects.length ? "none" : "block";
+
+    projects.forEach(project => {
+      const card = document.createElement("article");
+      card.className = "project";
+
+      const videoBox = document.createElement("div");
+      videoBox.className = "project-video";
+      if (project.videoUrl) {
+        const video = document.createElement("video");
+        video.src = project.videoUrl;
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.setAttribute("aria-label", project.name + " recording");
+        videoBox.appendChild(video);
+      } else {
+        const emptyVideo = document.createElement("div");
+        emptyVideo.className = "no-video";
+        emptyVideo.textContent = "No playable video available";
+        videoBox.appendChild(emptyVideo);
+      }
+
+      const info = document.createElement("div");
+      info.className = "project-info";
+
+      const titleRow = document.createElement("div");
+      titleRow.className = "project-title-row";
+      const title = document.createElement("strong");
+      title.textContent = project.name;
+      const tag = document.createElement("span");
+      tag.className = "project-tag";
+      tag.textContent = "SCAN";
+      titleRow.append(title, tag);
+
+      const meta = document.createElement("div");
+      meta.className = "project-meta";
+      meta.textContent = fmtTime(project.duration) + " · " +
+        project.frames.length + " sampled frames · " +
+        project.width + " × " + project.height + " px · " +
+        project.createdAt.toLocaleString();
+
+      const actions = document.createElement("div");
+      actions.className = "project-actions";
+
+      if (project.videoBlob) {
+        const downloadVideo = document.createElement("button");
+        downloadVideo.textContent = "Download video";
+        downloadVideo.addEventListener("click", () => {
+          const ext = project.videoType.includes("mp4") ? "mp4" : "webm";
+          downloadBlob(project.videoBlob, project.name.toLowerCase().replace(/\s+/g, "-") + "." + ext);
+        });
+        actions.appendChild(downloadVideo);
+      }
+
+      const downloadFrames = document.createElement("button");
+      downloadFrames.textContent = "Export frames";
+      downloadFrames.disabled = project.frames.length === 0;
+      downloadFrames.addEventListener("click", async () => {
+        notify("Downloading sampled frames individually. Your browser may ask to allow multiple downloads.");
+        for (const frame of project.frames) {
+          downloadBlob(frame.blob, project.name.toLowerCase().replace(/\s+/g, "-") + "-frame-" + String(frame.id).padStart(3, "0") + ".jpg");
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        notify("Frame download requests sent for " + project.name + ".", "good");
+      });
+      actions.appendChild(downloadFrames);
+
+      const remove = document.createElement("button");
+      remove.textContent = "Delete";
+      remove.addEventListener("click", () => {
+        if (!confirm("Delete " + project.name + " and its locally held video and frames?")) return;
+        if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
+        projects = projects.filter(p => p.id !== project.id);
+        renderProjects();
+        updateStats();
+      });
+      actions.appendChild(remove);
+
+      info.append(titleRow, meta, actions);
+      card.append(videoBox, info);
+      container.appendChild(card);
+    });
+    updateStats();
+  }
+
+  async function stopAll() {
+    if (scanActive) await stopScan();
+    await stopCameraTracks();
+    updateCameraUI();
+  }
+
+  $("startCamera").addEventListener("click", startCamera);
+  $("stopCamera").addEventListener("click", async () => {
+    await stopAll();
+    notify("Camera stopped. Your saved scan projects remain available in this page.");
+  });
+  $("startScan").addEventListener("click", startScan);
+  $("stopScan").addEventListener("click", stopScan);
+
+  $("cameraSelect").addEventListener("change", async () => {
+    if (scanActive) {
+      notify("Stop the current scan before changing cameras.", "bad");
+      return;
+    }
+    if (stream) await startCamera();
+  });
+
+  $("quality").addEventListener("change", async () => {
+    if (scanActive) {
+      notify("Stop the current scan before changing video quality.", "bad");
+      return;
+    }
+    if (stream) await startCamera();
+  });
+
+  $("sampleRate").addEventListener("change", () => {
+    if (!scanActive) return;
+    clearInterval(sampleTimer);
+    sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+    notify("Automatic frame sampling interval updated.", "good");
+  });
+
+  $("clearProjects").addEventListener("click", () => {
+    if (!projects.length) return;
+    if (!confirm("Delete every saved scan project from this page? Download videos you want to keep first.")) return;
+    projects.forEach(project => {
+      if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
+    });
+    projects = [];
+    renderProjects();
+    notify("All scan projects have been cleared.", "good");
   });
 
   window.addEventListener("pagehide", () => {
+    clearInterval(sampleTimer);
+    stopClock();
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch (_) {}
+    }
     if (stream) stream.getTracks().forEach(track => track.stop());
-    frames.forEach(frame => URL.revokeObjectURL(frame.url));
+    projects.forEach(project => {
+      if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
+    });
   });
 
-  updateStats();
-  updateCameraUI(false);
+  updateCameraUI();
+  renderProjects();
 })();
 </script>
 </body>

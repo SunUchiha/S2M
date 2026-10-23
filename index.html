@@ -5,18 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="S2M — Scan to Model. Capture real-world objects, organize scan projects, view 3D models, and prepare data for photogrammetry reconstruction.">
+<meta name="description" content="S2M — Scan to Model. Capture real-world objects, select them, organize scan projects, reconstruct low-poly 3D models from depth, and export GLB.">
 <title>S2M — Scan to Model</title>
 
 <!-- JSZip for ZIP exports (CDN dependency) -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
-<!-- Three.js ES module importmap (CDN dependency) -->
+<!-- Three.js + Transformers.js ES module importmap (CDN dependencies) -->
 <script type="importmap">
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0"
   }
 }
 </script>
@@ -35,6 +36,7 @@
   --green-dim: rgba(163, 230, 53, 0.18);
   --green-glow: rgba(163, 230, 53, 0.35);
   --red: #f87171;
+  --yellow: #fbbf24;
   --radius: 12px;
   --radius-sm: 8px;
 }
@@ -78,6 +80,7 @@ button.green:hover:not(:disabled) { background: #b9eb55; border-color: #b9eb55; 
 button.danger { color: var(--red); border-color: #3a2222; }
 button.danger:hover:not(:disabled) { background: #2a1414; border-color: var(--red); }
 button.ghost { background: transparent; border-color: var(--line); }
+button.active-toggle { background: var(--green); color: var(--black); border-color: var(--green); }
 
 header {
   height: 60px;
@@ -140,9 +143,11 @@ h1 {
 }
 .notice.show { display: block; }
 .notice.good { border-color: rgba(163,230,53,0.4); }
-.notice.good::before { content: "✓ "; color: var(--green); font-weight: 800; }
+.notice.good::before { content: "\2713 "; color: var(--green); font-weight: 800; }
 .notice.bad { border-color: rgba(248,113,113,0.4); }
 .notice.bad::before { content: "! "; color: var(--red); font-weight: 800; }
+.notice.warn { border-color: rgba(251,191,36,0.4); }
+.notice.warn::before { content: "\26A0 "; color: var(--yellow); font-weight: 800; }
 
 .stats {
   display: grid;
@@ -194,6 +199,7 @@ h1 {
   max-height: 70vh;
   background: #000;
   overflow: hidden;
+  touch-action: none;
 }
 .camera video#liveVideo {
   width: 100%; height: 100%;
@@ -207,22 +213,26 @@ h1 {
   pointer-events: none;
   mix-blend-mode: screen;
 }
+.selection-overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+.selection-overlay.active { pointer-events: auto; cursor: crosshair; }
 .center-guide {
   position: absolute; inset: 0;
   pointer-events: none;
   display: none;
+  z-index: 3;
 }
 .center-guide.show { display: block; }
 .center-guide::before, .center-guide::after {
   content: ""; position: absolute;
   background: rgba(163, 230, 53, 0.5);
 }
-.center-guide::before {
-  left: 10%; right: 10%; top: 50%; height: 1px;
-}
-.center-guide::after {
-  top: 10%; bottom: 10%; left: 50%; width: 1px;
-}
+.center-guide::before { left: 10%; right: 10%; top: 50%; height: 1px; }
+.center-guide::after { top: 10%; bottom: 10%; left: 50%; width: 1px; }
 .center-guide .frame {
   position: absolute;
   top: 12%; left: 12%; right: 12%; bottom: 12%;
@@ -262,6 +272,7 @@ h1 {
   font-size: 10px; font-weight: 800;
   letter-spacing: 1px;
   backdrop-filter: blur(4px);
+  z-index: 6;
 }
 .rec-indicator.active { display: flex; }
 .rec-dot {
@@ -283,7 +294,23 @@ h1 {
   font-size: 10px; font-weight: 700;
   letter-spacing: 0.3px;
   backdrop-filter: blur(4px);
+  z-index: 6;
 }
+.selection-badge {
+  position: absolute;
+  left: 12px; bottom: 12px;
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(163,230,53,0.5);
+  color: var(--green);
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.5px;
+  display: none;
+  z-index: 6;
+  backdrop-filter: blur(4px);
+}
+.selection-badge.show { display: block; }
 .camera-bottom {
   display: flex; flex-wrap: wrap; gap: 10px;
   justify-content: space-between; align-items: center;
@@ -304,6 +331,7 @@ h1 {
   border-top: 1px solid var(--line);
 }
 .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.button-row.three { grid-template-columns: 1fr 1fr 1fr; }
 .button-row button { min-height: 46px; }
 .hint { font-size: 11px; color: var(--gray); line-height: 1.6; margin: 2px 0; }
 
@@ -416,14 +444,8 @@ select {
 }
 .project-tag.still { color: var(--white); border-color: var(--line); }
 .project-info { padding: 12px 14px; }
-.project-name {
-  font-size: 13px; font-weight: 700;
-  overflow-wrap: anywhere;
-}
-.project-meta {
-  color: var(--gray); font-size: 11px;
-  margin-top: 6px; line-height: 1.55;
-}
+.project-name { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.project-meta { color: var(--gray); font-size: 11px; margin-top: 6px; line-height: 1.55; }
 .project-actions {
   display: flex; flex-wrap: wrap; gap: 6px;
   margin-top: 11px;
@@ -431,6 +453,9 @@ select {
 .project-actions button {
   font-size: 10px; padding: 8px 10px;
   border-radius: 6px;
+}
+.project-actions button.reconstruct {
+  background: var(--green); color: var(--black); border-color: var(--green);
 }
 .empty-state {
   border: 1px dashed var(--line);
@@ -440,10 +465,7 @@ select {
   color: var(--gray);
   font-size: 12px;
 }
-.empty-state strong {
-  display: block; color: var(--white);
-  margin-bottom: 6px; font-size: 13px;
-}
+.empty-state strong { display: block; color: var(--white); margin-bottom: 6px; font-size: 13px; }
 
 .viewer-shell {
   border: 1px solid var(--line);
@@ -475,6 +497,26 @@ select {
 .viewer-overlay.show { display: grid; }
 .viewer-overlay.hide { display: none; }
 .viewer-overlay strong { color: var(--white); font-size: 13px; display: block; margin-bottom: 6px; }
+.viewer-loading {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none;
+  align-items: center; justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+.viewer-loading.show { display: flex; }
+.viewer-loading .spinner {
+  width: 28px; height: 28px;
+  border: 2px solid var(--line);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.viewer-loading .label { font-size: 11px; color: var(--green); letter-spacing: 0.5px; }
 .viewer-controls {
   display: flex; flex-wrap: wrap; gap: 8px;
   padding: 12px 14px;
@@ -505,6 +547,7 @@ select {
   flex-shrink: 0;
 }
 .status-dot.offline { background: var(--gray); }
+.status-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
 .recon-text strong { font-size: 13px; display: block; }
 .recon-text span { font-size: 11px; color: var(--gray); display: block; margin-top: 2px; line-height: 1.55; }
 .recon-stages {
@@ -519,6 +562,7 @@ select {
   font-size: 12px;
   background: var(--black);
 }
+.recon-stage.active { border-color: rgba(163,230,53,0.4); background: rgba(163,230,53,0.04); }
 .recon-stage .stage-num {
   font-size: 10px; font-weight: 800;
   color: var(--green); flex-shrink: 0;
@@ -587,7 +631,11 @@ select {
   border-radius: 6px;
   overflow: hidden;
   background: var(--black);
+  cursor: pointer;
+  transition: border-color .15s, transform .1s;
 }
+.frame-thumb:hover { border-color: var(--gray); }
+.frame-thumb.selected { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 .frame-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .frame-thumb .frame-num {
   position: absolute; bottom: 4px; left: 4px;
@@ -611,6 +659,15 @@ select {
   border-radius: 3px;
   font-family: ui-monospace, monospace;
 }
+.frame-thumb .reconstruct-mark {
+  position: absolute; top: 4px; left: 4px;
+  font-size: 9px; padding: 2px 5px;
+  background: var(--green);
+  color: var(--black);
+  border-radius: 3px;
+  font-weight: 800;
+  font-family: ui-monospace, monospace;
+}
 .meta-list {
   display: grid; gap: 0;
   font-size: 12px;
@@ -623,6 +680,16 @@ select {
 .meta-list div:last-child { border-bottom: none; }
 .meta-list div span:first-child { color: var(--gray); }
 .meta-list div span:last-child { font-weight: 600; overflow-wrap: anywhere; text-align: right; }
+
+.reconstruct-panel {
+  border: 1px solid rgba(163,230,53,0.3);
+  background: rgba(163,230,53,0.04);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.reconstruct-panel h4 { color: var(--green); }
+.reconstruct-panel .hint { margin-top: 8px; }
 
 .footer {
   border-top: 1px solid var(--line);
@@ -660,6 +727,7 @@ select {
   .stat:nth-child(odd) { border-right: 1px solid var(--line); }
   .stat:nth-child(even) { border-left: none; }
   .button-row { grid-template-columns: 1fr; }
+  .button-row.three { grid-template-columns: 1fr 1fr 1fr; }
 }
 </style>
 </head>
@@ -689,8 +757,8 @@ select {
 
 <main>
   <div class="eyebrow">WORKSPACE / SCANNER</div>
-  <h1>Capture reality.</h1>
-  <p class="subtitle">Record objects from multiple angles. S2M samples frames automatically, organizes each scan into a project, and prepares your data for 3D reconstruction. A live green edge overlay helps you see which surfaces the camera is capturing.</p>
+  <h1>Capture. Select. Reconstruct.</h1>
+  <p class="subtitle">Record objects from multiple angles, draw a selection around the part you want, and let S2M turn that captured view into a low-poly 3D mesh using on-device depth estimation. The result loads directly into the 3D viewer and exports as GLB.</p>
 
   <div id="notice" class="notice" role="status" aria-live="polite"></div>
 
@@ -711,18 +779,20 @@ select {
         <div id="camera" class="camera">
           <video id="liveVideo" autoplay muted playsinline></video>
           <canvas id="edgeOverlay" class="edge-overlay"></canvas>
+          <canvas id="selectionOverlay" class="selection-overlay"></canvas>
           <div id="centerGuide" class="center-guide">
             <div class="frame"></div>
           </div>
           <div class="camera-placeholder">
             <div class="symbol">◎</div>
             <strong>Camera viewport</strong>
-            <p>Start the camera to begin. The live green edge overlay and an optional framing guide help you keep the object in view. Camera access requires HTTPS or localhost.</p>
+            <p>Start the camera, then use the selection tool to draw a shape around your object. The green edge overlay will only highlight edges inside the selection.</p>
           </div>
           <div id="recIndicator" class="rec-indicator">
             <span class="rec-dot"></span><span>RECORDING</span>
           </div>
           <div id="cameraCounter" class="camera-counter">0 frames</div>
+          <div id="selectionBadge" class="selection-badge">SELECTION ACTIVE</div>
         </div>
         <div class="camera-bottom">
           <span id="liveStatus" class="live-status">No active camera</span>
@@ -805,7 +875,30 @@ select {
 
   <section class="section">
     <div class="section-head">
-      <h2>03 / Scanning guidelines</h2>
+      <h2>03 / Object selection tool</h2>
+      <span class="meta">EDGE OVERLAY + FRAME CAPTURE RESPECT THIS</span>
+    </div>
+    <div class="camera-shell">
+      <div class="settings-grid">
+        <p class="hint" style="margin:0 0 4px">Draw a shape around the object you want to capture. The edge overlay and any captured frames will only consider pixels inside your selection. When no selection is active, the entire frame is processed.</p>
+        <div class="button-row three">
+          <button id="selModeOff" class="active-toggle">Off</button>
+          <button id="selModeRect">Rectangle</button>
+          <button id="selModeLasso">Lasso</button>
+        </div>
+        <div class="button-row">
+          <button id="clearSelection" class="ghost" disabled>Clear selection</button>
+          <button id="applySelection" class="green" disabled>Apply to next captures</button>
+        </div>
+        <p class="hint" style="margin:0" id="selectionStatus">No selection active. Edge detection processes the entire frame.</p>
+        <p class="hint" style="margin:0;color:var(--gray)">Tip: Rectangle is fastest. Lasso follows irregular shapes. The selection is stored with each captured frame so the reconstruction step can mask out the background.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>04 / Scanning guidelines</h2>
       <span class="meta">READ BEFORE FIRST SCAN</span>
     </div>
     <div class="guidelines">
@@ -815,14 +908,14 @@ select {
       <div class="guide-item"><span class="guide-num">04</span><div class="guide-text">Capture multiple viewpoints.<small>Sweep around the object at one height, then repeat at higher and lower angles when practical.</small></div></div>
       <div class="guide-item"><span class="guide-num">05</span><div class="guide-text">Keep the object sharp.<small>Avoid motion blur. Maintain a reasonably consistent distance from the object throughout the scan.</small></div></div>
       <div class="guide-item"><span class="guide-num">06</span><div class="guide-text">Favor textured, matte surfaces.<small>Plain, reflective, or transparent objects are harder for feature-matching reconstruction.</small></div></div>
-      <div class="guide-item"><span class="guide-num">07</span><div class="guide-text">Capture complete coverage.<small>Include all visible sides, the top, and any accessible surfaces of the object.</small></div></div>
-      <div class="guide-item"><span class="guide-num">08</span><div class="guide-text">Stop when you have enough.<small>A typical scan needs 30 to 100 sharp, overlapping frames. Too few frames reduces reconstruction quality.</small></div></div>
+      <div class="guide-item"><span class="guide-num">07</span><div class="guide-text">Use the selection tool.<small>Draw a tight shape around your object so the depth-based reconstruction does not include the background.</small></div></div>
+      <div class="guide-item"><span class="guide-num">08</span><div class="guide-text">Stop when you have enough.<small>A typical scan needs 30 to 100 sharp, overlapping frames. Pick the sharpest one in the project modal to reconstruct.</small></div></div>
     </div>
   </section>
 
   <section class="section">
     <div class="section-head">
-      <div><h2>04 / Scan projects</h2></div>
+      <div><h2>05 / Scan projects</h2></div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="exportIndex" class="ghost" disabled>Export JSON index</button>
         <button id="clearProjects" class="danger" disabled>Clear all</button>
@@ -837,7 +930,7 @@ select {
 
   <section class="section">
     <div class="section-head">
-      <h2>05 / 3D model viewer</h2>
+      <h2>06 / 3D model viewer</h2>
       <span class="meta" id="viewerStatus">No model loaded</span>
     </div>
     <div class="viewer-shell">
@@ -850,6 +943,10 @@ select {
             <br><br>
             <span style="font-size:10px;color:var(--gray);">Orbit · Zoom · Pan · Reset · Export GLB</span>
           </div>
+        </div>
+        <div id="viewerLoading" class="viewer-loading">
+          <div class="spinner"></div>
+          <div class="label" id="viewerLoadingLabel">Working...</div>
         </div>
       </div>
       <div class="viewer-controls">
@@ -865,34 +962,32 @@ select {
 
   <section class="section">
     <div class="section-head">
-      <h2>06 / Reconstruction</h2>
-      <span class="meta">PHOTGRAMMETRY PIPELINE</span>
+      <h2>07 / Reconstruction</h2>
+      <span class="meta">DEPTH-BASED MESH · HONEST STATUS</span>
     </div>
     <div class="recon-panel">
       <div class="recon-status">
-        <div class="status-dot offline" id="reconDot"></div>
+        <div class="status-dot online" id="reconDot"></div>
         <div class="recon-text">
-          <strong id="reconTitle">Reconstruction engine not connected</strong>
-          <span id="reconSub">S2M prepares your capture data locally. A separate reconstruction backend is required to generate real 3D geometry. No fake or sample mesh is produced.</span>
+          <strong id="reconTitle">In-browser depth reconstruction ready</strong>
+          <span id="reconSub">S2M runs Depth Anything (small) in your browser to convert a captured frame into a low-poly displaced mesh. The model is downloaded on first use (~25 MB). True multi-view photogrammetry still requires the separate COLMAP backend.</span>
         </div>
       </div>
       <div class="recon-stages">
-        <div class="recon-stage"><span class="stage-num">01</span><div class="stage-body"><strong>Image validation</strong><span>Check sharpness, exposure, and overlap before submission. S2M already computes a Laplacian-based sharpness score per sampled frame.</span></div></div>
-        <div class="recon-stage"><span class="stage-num">02</span><div class="stage-body"><strong>Feature extraction and matching</strong><span>SIFT or similar features are detected and matched across image pairs to find corresponding points.</span></div></div>
-        <div class="recon-stage"><span class="stage-num">03</span><div class="stage-body"><strong>Structure from Motion</strong><span>Estimate camera positions and orientations from matched features. Produces a sparse point cloud.</span></div></div>
-        <div class="recon-stage"><span class="stage-num">04</span><div class="stage-body"><strong>Dense reconstruction</strong><span>Build a dense point cloud or multi-view depth map from aligned cameras.</span></div></div>
-        <div class="recon-stage"><span class="stage-num">05</span><div class="stage-body"><strong>Mesh and texture</strong><span>Reconstruct a surface mesh, generate UV maps, and project textures from the original images.</span></div></div>
-        <div class="recon-stage"><span class="stage-num">06</span><div class="stage-body"><strong>Export</strong><span>Deliver a GLB, OBJ, or PLY file ready for the 3D viewer above.</span></div></div>
+        <div class="recon-stage" id="stage1"><span class="stage-num">01</span><div class="stage-body"><strong>Frame selection</strong><span>Open a project, click a frame thumbnail to mark it as the source. The selection stored with that frame masks out the background.</span></div></div>
+        <div class="recon-stage" id="stage2"><span class="stage-num">02</span><div class="stage-body"><strong>Depth estimation</strong><span>Depth Anything (small) predicts a per-pixel depth map of the selected frame. Closer surfaces are displaced more in the final mesh.</span></div></div>
+        <div class="recon-stage" id="stage3"><span class="stage-num">03</span><div class="stage-body"><strong>Mesh assembly</strong><span>A 48x48 vertex grid is displaced by depth. Vertices outside the selection mask are dropped. Original pixel colors become vertex colors.</span></div></div>
+        <div class="recon-stage" id="stage4"><span class="stage-num">04</span><div class="stage-body"><strong>View and export</strong><span>The mesh loads into the 3D viewer above. Use Export GLB to save a binary glTF file you can open in Blender, three.js, or any 3D tool.</span></div></div>
       </div>
       <div class="recon-note">
-        S2M does not invent geometry. Until a backend is connected, no reconstruction is performed and no fake model is generated. See the deployment notes below this code for the recommended COLMAP-based backend architecture.
+        Honest limitation: this produces a 2.5D relief of the visible side of the object, not a complete 3D scan with back and underside. For full 360-degree reconstruction, the COLMAP backend (planned) is required. No fake geometry is ever generated.
       </div>
     </div>
   </section>
 
   <div class="footer">
     <div><strong>S2M</strong><br>Scan to Model · Local browser workspace</div>
-    <div style="text-align:right">IndexedDB storage · Three.js viewer<br>Dark interface · HTTPS required for camera</div>
+    <div style="text-align:right">IndexedDB · Three.js · Depth Anything<br>Dark interface · HTTPS required for camera</div>
   </div>
 </main>
 
@@ -924,6 +1019,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
   const liveVideo = $("liveVideo");
   const edgeCanvas = $("edgeOverlay");
   const edgeCtx = edgeCanvas.getContext("2d");
+  const selectionCanvas = $("selectionOverlay");
+  const selCtx = selectionCanvas.getContext("2d");
   const processCanvas = $("processCanvas");
   const processCtx = processCanvas.getContext("2d", { willReadFrequently: true });
   const captureCanvas = $("captureCanvas");
@@ -951,12 +1048,21 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       centerGuide: true,
       autoSample: true
     },
-    objectUrls: []
+    objectUrls: [],
+    selection: {
+      mode: "off",
+      drawing: false,
+      startX: 0, startY: 0,
+      currentX: 0, currentY: 0,
+      lassoPoints: [],
+      active: null,
+      applyToCaptures: false
+    }
   };
 
   // ===== IndexedDB =====
   const DB_NAME = "s2m";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE = "projects";
   let db = null;
 
@@ -1034,7 +1140,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     el.textContent = text;
     el.className = "notice show " + type;
     clearTimeout(state.notificationTimer);
-    state.notificationTimer = setTimeout(() => el.classList.remove("show"), 6500);
+    state.notificationTimer = setTimeout(() => el.classList.remove("show"), 8000);
   }
   function fmtTime(seconds) {
     seconds = Math.max(0, Math.floor(seconds));
@@ -1134,7 +1240,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       });
       await liveVideo.play().catch(() => {});
       await refreshCameras();
-      notify("Camera ready. Start a scan or capture a still when your object is in view.");
+      notify("Camera ready. Use the selection tool to draw around your object, then start a scan.");
       startEdgeLoop();
     } catch (err) {
       await stopCameraTracks();
@@ -1162,6 +1268,218 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     updateCameraUI();
   }
 
+  // ===== Selection tool =====
+  function setSelectionMode(mode) {
+    state.selection.mode = mode;
+    state.selection.drawing = false;
+    state.selection.lassoPoints = [];
+    ["selModeOff","selModeRect","selModeLasso"].forEach(id => $(id).classList.remove("active-toggle"));
+    if (mode === "off") {
+      $("selModeOff").classList.add("active-toggle");
+      selectionCanvas.classList.remove("active");
+      selCtx.clearRect(0,0,selectionCanvas.width,selectionCanvas.height);
+      $("selectionStatus").textContent = state.selection.active
+        ? "Selection mode off. Existing selection still active."
+        : "No selection active. Edge detection processes the entire frame.";
+    } else if (mode === "rectangle") {
+      $("selModeRect").classList.add("active-toggle");
+      selectionCanvas.classList.add("active");
+      $("selectionStatus").textContent = "Rectangle mode active. Tap and drag on the camera to draw.";
+    } else if (mode === "lasso") {
+      $("selModeLasso").classList.add("active-toggle");
+      selectionCanvas.classList.add("active");
+      $("selectionStatus").textContent = "Lasso mode active. Tap points on the camera to outline your object. Double-tap to close.";
+    }
+  }
+  function resizeSelectionCanvas() {
+    const rect = $("camera").getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    selectionCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+    selectionCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+    selectionCanvas.style.width = rect.width + "px";
+    selectionCanvas.style.height = rect.height + "px";
+    drawSelectionPreview();
+  }
+  function getCanvasPoint(e) {
+    const rect = selectionCanvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height
+    };
+  }
+  function onSelectionPointerDown(e) {
+    if (state.selection.mode === "off") return;
+    e.preventDefault();
+    selectionCanvas.setPointerCapture(e.pointerId);
+    const p = getCanvasPoint(e);
+    if (state.selection.mode === "rectangle") {
+      state.selection.drawing = true;
+      state.selection.startX = p.x;
+      state.selection.startY = p.y;
+      state.selection.currentX = p.x;
+      state.selection.currentY = p.y;
+    } else if (state.selection.mode === "lasso") {
+      state.selection.drawing = true;
+      state.selection.lassoPoints = [p];
+    }
+  }
+  function onSelectionPointerMove(e) {
+    if (!state.selection.drawing) return;
+    e.preventDefault();
+    const p = getCanvasPoint(e);
+    if (state.selection.mode === "rectangle") {
+      state.selection.currentX = p.x;
+      state.selection.currentY = p.y;
+    } else if (state.selection.mode === "lasso") {
+      const last = state.selection.lassoPoints[state.selection.lassoPoints.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 0.01) {
+        state.selection.lassoPoints.push(p);
+      }
+    }
+    drawSelectionPreview();
+  }
+  function onSelectionPointerUp(e) {
+    if (!state.selection.drawing) return;
+    e.preventDefault();
+    state.selection.drawing = false;
+    if (state.selection.mode === "rectangle") {
+      const x = Math.min(state.selection.startX, state.selection.currentX);
+      const y = Math.min(state.selection.startY, state.selection.currentY);
+      const w = Math.abs(state.selection.currentX - state.selection.startX);
+      const h = Math.abs(state.selection.currentY - state.selection.startY);
+      if (w > 0.02 && h > 0.02) {
+        state.selection.active = { type: "rectangle", x, y, w, h };
+        finalizeSelection();
+      } else {
+        notify("Selection too small. Try drawing a larger shape.", "warn");
+        drawSelectionPreview();
+      }
+    }
+  }
+  function onSelectionDoubleClick() {
+    if (state.selection.mode === "lasso" && state.selection.lassoPoints.length >= 3) {
+      state.selection.drawing = false;
+      state.selection.active = { type: "lasso", points: state.selection.lassoPoints.slice() };
+      finalizeSelection();
+    }
+  }
+  function finalizeSelection() {
+    $("selectionBadge").classList.add("show");
+    $("clearSelection").disabled = false;
+    $("applySelection").disabled = false;
+    $("selectionStatus").textContent = "Selection active. Edge overlay now only renders inside it. Toggle 'Apply to next captures' to store it with each frame.";
+    drawSelectionPreview();
+    notify("Selection active. Edges outside it are now hidden.");
+  }
+  function clearSelection() {
+    state.selection.active = null;
+    state.selection.lassoPoints = [];
+    state.selection.drawing = false;
+    $("selectionBadge").classList.remove("show");
+    $("clearSelection").disabled = true;
+    $("applySelection").disabled = true;
+    $("applySelection").classList.remove("active-toggle");
+    state.selection.applyToCaptures = false;
+    if (state.selection.mode === "off") {
+      $("selectionStatus").textContent = "No selection active. Edge detection processes the entire frame.";
+    } else {
+      $("selectionStatus").textContent = "Selection cleared. Draw a new shape on the camera.";
+    }
+    drawSelectionPreview();
+    notify("Selection cleared.");
+  }
+  function toggleApplyToCaptures() {
+    state.selection.applyToCaptures = !state.selection.applyToCaptures;
+    $("applySelection").classList.toggle("active-toggle", state.selection.applyToCaptures);
+    if (state.selection.applyToCaptures) {
+      notify("Selection will be stored with each captured frame and used by the depth reconstructor.", "good");
+    } else {
+      notify("Selection will not be stored with future captures. Existing frames keep their stored selection.");
+    }
+  }
+  function drawSelectionPreview() {
+    selCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    if (state.selection.mode === "off" && !state.selection.active) return;
+    const W = selectionCanvas.width;
+    const H = selectionCanvas.height;
+    selCtx.strokeStyle = "#a3e635";
+    selCtx.fillStyle = "rgba(163,230,53,0.1)";
+    selCtx.lineWidth = Math.max(2, W * 0.005);
+    if (state.selection.active) {
+      const s = state.selection.active;
+      if (s.type === "rectangle") {
+        selCtx.fillRect(s.x * W, s.y * H, s.w * W, s.h * H);
+        selCtx.strokeRect(s.x * W, s.y * H, s.w * W, s.h * H);
+      } else if (s.type === "lasso" && s.points.length >= 3) {
+        selCtx.beginPath();
+        s.points.forEach((p, i) => {
+          if (i === 0) selCtx.moveTo(p.x * W, p.y * H);
+          else selCtx.lineTo(p.x * W, p.y * H);
+        });
+        selCtx.closePath();
+        selCtx.fill();
+        selCtx.stroke();
+      }
+    }
+    if (state.selection.drawing) {
+      if (state.selection.mode === "rectangle") {
+        const x = Math.min(state.selection.startX, state.selection.currentX);
+        const y = Math.min(state.selection.startY, state.selection.currentY);
+        const w = Math.abs(state.selection.currentX - state.selection.startX);
+        const h = Math.abs(state.selection.currentY - state.selection.startY);
+        selCtx.fillRect(x * W, y * H, w * W, h * H);
+        selCtx.strokeRect(x * W, y * H, w * W, h * H);
+      } else if (state.selection.mode === "lasso" && state.selection.lassoPoints.length > 0) {
+        selCtx.beginPath();
+        state.selection.lassoPoints.forEach((p, i) => {
+          if (i === 0) selCtx.moveTo(p.x * W, p.y * H);
+          else selCtx.lineTo(p.x * W, p.y * H);
+        });
+        selCtx.stroke();
+      }
+    }
+  }
+  function buildMask(selection, width, height) {
+    const mask = new Float32Array(width * height);
+    if (!selection) {
+      mask.fill(1);
+      return mask;
+    }
+    if (selection.type === "rectangle") {
+      const x0 = Math.floor(selection.x * width);
+      const y0 = Math.floor(selection.y * height);
+      const x1 = Math.ceil((selection.x + selection.w) * width);
+      const y1 = Math.ceil((selection.y + selection.h) * height);
+      for (let y = Math.max(0, y0); y < Math.min(height, y1); y++) {
+        for (let x = Math.max(0, x0); x < Math.min(width, x1); x++) {
+          mask[y * width + x] = 1;
+        }
+      }
+    } else if (selection.type === "lasso" && selection.points.length >= 3) {
+      const pts = selection.points.map(p => ({ x: p.x * width, y: p.y * height }));
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (pointInPolygon(x, y, pts)) mask[y * width + x] = 1;
+        }
+      }
+    } else {
+      mask.fill(1);
+    }
+    return mask;
+  }
+  function pointInPolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      const intersect = ((yi > y) !== (yj > y)) &&
+        (x < (xj - xi) * (y - yi) / (yj - yi + 0.0001) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
   // ===== Edge detection (Sobel) =====
   function startEdgeLoop() {
     if (state.edgeRaf) return;
@@ -1172,7 +1490,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         return;
       }
       const now = performance.now();
-      if (now - state.lastEdgeTime < 50) return; // throttle ~20fps
+      if (now - state.lastEdgeTime < 50) return;
       state.lastEdgeTime = now;
       processEdgeFrame();
     };
@@ -1191,7 +1509,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     const rect = cameraEl.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    // Compute cover-crop source rectangle (object-fit: cover)
     const containerAspect = rect.width / rect.height;
     const videoAspect = vw / vh;
     let sx, sy, sw, sh;
@@ -1207,7 +1524,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       sy = (vh - sh) / 2;
     }
 
-    // Downsample for performance
     const procW = 160;
     const procH = Math.max(1, Math.round(procW * rect.height / rect.width));
     processCanvas.width = procW;
@@ -1215,18 +1531,14 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     processCtx.drawImage(liveVideo, sx, sy, sw, sh, 0, 0, procW, procH);
 
     let imageData;
-    try {
-      imageData = processCtx.getImageData(0, 0, procW, procH);
-    } catch (e) {
-      return;
-    }
+    try { imageData = processCtx.getImageData(0, 0, procW, procH); }
+    catch (e) { return; }
     const data = imageData.data;
     const gray = new Uint8ClampedArray(procW * procH);
     for (let i = 0, j = 0; i < data.length; i += 4, j++) {
       gray[j] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
     }
 
-    // Sobel operator
     const edges = new Uint8ClampedArray(procW * procH);
     const threshold = 60;
     for (let y = 1; y < procH - 1; y++) {
@@ -1247,7 +1559,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       }
     }
 
-    // Draw green edges on overlay, scaled to container
+    const mask = state.selection.active ? buildMask(state.selection.active, procW, procH) : null;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     edgeCanvas.width = Math.max(1, Math.round(rect.width * dpr));
     edgeCanvas.height = Math.max(1, Math.round(rect.height * dpr));
@@ -1263,7 +1576,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       for (let x = 0; x < procW; x++) {
         const i = y * procW + x;
         const mag = edges[i];
-        if (mag > 0) {
+        if (mag > 0 && (!mask || mask[i] > 0.5)) {
           edgeCtx.globalAlpha = Math.min(0.85, mag / 220);
           edgeCtx.fillRect(x * scaleX, y * scaleY, dotSize, dotSize);
         }
@@ -1275,11 +1588,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
   // ===== Recorder =====
   function pickRecorderType() {
     if (!window.MediaRecorder) return "";
-    const candidates = [
-      "video/webm;codecs=vp9",
-      "video/webm;codecs=vp8",
-      "video/webm"
-    ];
+    const candidates = ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
     return candidates.find(t => MediaRecorder.isTypeSupported(t)) || "";
   }
   function getVideoBitrate() {
@@ -1301,14 +1610,18 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       });
       if (!state.scanActive) return;
       const sharpness = computeSharpness(captureCanvas.width, captureCanvas.height);
-      state.scanFrames.push({
+      const frame = {
         id: state.scanFrames.length + 1,
         blob,
         width: captureCanvas.width,
         height: captureCanvas.height,
         time: currentDuration(),
-        sharpness
-      });
+        sharpness,
+        selection: state.selection.applyToCaptures && state.selection.active
+          ? JSON.parse(JSON.stringify(state.selection.active))
+          : null
+      };
+      state.scanFrames.push(frame);
       $("cameraCounter").textContent = state.scanFrames.length + " frames";
       updateStats();
     } catch (err) {
@@ -1316,7 +1629,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     }
   }
 
-  // ===== Sharpness heuristic (Laplacian variance) =====
   function computeSharpness(w, h) {
     const tw = 64, th = Math.max(1, Math.round(tw * h / w));
     const tmp = document.createElement("canvas");
@@ -1324,11 +1636,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     const tctx = tmp.getContext("2d", { willReadFrequently: true });
     tctx.drawImage(captureCanvas, 0, 0, w, h, 0, 0, tw, th);
     let imageData;
-    try {
-      imageData = tctx.getImageData(0, 0, tw, th);
-    } catch (e) {
-      return 0;
-    }
+    try { imageData = tctx.getImageData(0, 0, tw, th); }
+    catch (e) { return 0; }
     const data = imageData.data;
     const gray = new Float32Array(tw * th);
     for (let i = 0, j = 0; i < data.length; i += 4, j++) {
@@ -1350,7 +1659,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     return Math.round(variance);
   }
 
-  // ===== Clock =====
   function startClock() {
     clearInterval(state.clockTimer);
     state.clockTimer = setInterval(() => {
@@ -1381,7 +1689,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       state.recorder = type
         ? new MediaRecorder(state.stream, { mimeType: type, videoBitsPerSecond: bitrate })
         : new MediaRecorder(state.stream, { videoBitsPerSecond: bitrate });
-
       state.recorder.addEventListener("dataavailable", event => {
         if (event.data && event.data.size) state.chunks.push(event.data);
       });
@@ -1446,12 +1753,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         width: liveVideo.videoWidth,
         height: liveVideo.videoHeight
       };
-      try {
-        await dbPut(project);
-      } catch (e) {
-        notify("Could not save project to local storage: " + e.message, "bad");
-        return;
-      }
+      try { await dbPut(project); }
+      catch (e) { notify("Could not save project to local storage: " + e.message, "bad"); return; }
       state.projects.unshift(project);
       state.scanFrames = [];
       state.chunks = [];
@@ -1460,11 +1763,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       $("projectName").value = "";
       renderProjects();
       updateCameraUI();
-      if (project.videoBlob) {
-        notify("Scan saved as " + project.name + ". Video and " + project.frames.length + " sampled frames stored locally.", "good");
-      } else {
-        notify("Frames saved to project. No video was recorded for this scan.", "bad");
-      }
+      notify("Scan saved as " + project.name + ". " + project.frames.length + " frames stored.", "good");
     } catch (err) {
       notify("Could not finish saving the scan: " + err.message, "bad");
     } finally {
@@ -1496,22 +1795,17 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         videoBlob: null,
         videoType: "",
         frames: [{
-          id: 1,
-          blob,
-          width: captureCanvas.width,
-          height: captureCanvas.height,
-          time: 0,
-          sharpness
+          id: 1, blob,
+          width: captureCanvas.width, height: captureCanvas.height,
+          time: 0, sharpness,
+          selection: state.selection.applyToCaptures && state.selection.active
+            ? JSON.parse(JSON.stringify(state.selection.active))
+            : null
         }],
-        width: captureCanvas.width,
-        height: captureCanvas.height
+        width: captureCanvas.width, height: captureCanvas.height
       };
-      try {
-        await dbPut(project);
-      } catch (e) {
-        notify("Could not save still capture: " + e.message, "bad");
-        return;
-      }
+      try { await dbPut(project); }
+      catch (e) { notify("Could not save still capture: " + e.message, "bad"); return; }
       state.projects.unshift(project);
       $("projectName").value = "";
       renderProjects();
@@ -1543,16 +1837,13 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     state.projects.forEach(project => {
       const card = document.createElement("article");
       card.className = "project-card";
-
       const thumb = document.createElement("div");
       thumb.className = "project-thumb";
       thumb.addEventListener("click", () => openProjectDetail(project));
       if (project.videoBlob) {
         const v = document.createElement("video");
         v.src = makeObjectUrl(project.videoBlob);
-        v.muted = true;
-        v.preload = "metadata";
-        v.playsInline = true;
+        v.muted = true; v.preload = "metadata"; v.playsInline = true;
         thumb.appendChild(v);
       } else if (project.frames.length) {
         const img = document.createElement("img");
@@ -1569,7 +1860,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       tag.className = "project-tag" + (project.scanType === "still" ? " still" : "");
       tag.textContent = project.scanType === "still" ? "STILL" : "SCAN";
       thumb.appendChild(tag);
-
       const info = document.createElement("div");
       info.className = "project-info";
       const name = document.createElement("div");
@@ -1578,14 +1868,22 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       const meta = document.createElement("div");
       meta.className = "project-meta";
       const date = new Date(project.createdAt);
+      const selCount = project.frames.filter(f => f.selection).length;
       meta.textContent = fmtTime(project.duration) + " · " + project.frames.length + " frames · " +
-        project.width + "×" + project.height + " · " + date.toLocaleString();
+        project.width + "×" + project.height + " · " + date.toLocaleString() +
+        (selCount ? " · " + selCount + " masked" : "");
       const actions = document.createElement("div");
       actions.className = "project-actions";
       const open = document.createElement("button");
       open.textContent = "Open";
       open.addEventListener("click", () => openProjectDetail(project));
       actions.appendChild(open);
+      const recon = document.createElement("button");
+      recon.className = "reconstruct";
+      recon.textContent = "Reconstruct 3D";
+      recon.disabled = project.frames.length === 0;
+      recon.addEventListener("click", () => openProjectDetail(project, true));
+      actions.appendChild(recon);
       if (project.videoBlob) {
         const dl = document.createElement("button");
         dl.textContent = "Video";
@@ -1605,12 +1903,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       del.textContent = "Delete";
       del.addEventListener("click", async () => {
         if (!confirm("Delete " + project.name + " and its locally stored video and frames?")) return;
-        try {
-          await dbDelete(project.id);
-        } catch (e) {
-          notify("Could not delete project: " + e.message, "bad");
-          return;
-        }
+        try { await dbDelete(project.id); }
+        catch (e) { notify("Could not delete project: " + e.message, "bad"); return; }
         state.projects = state.projects.filter(p => p.id !== project.id);
         renderProjects();
         updateStats();
@@ -1626,12 +1920,32 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
   // ===== Project detail modal =====
   let modalFrameUrls = [];
-  function openProjectDetail(project) {
+  let modalSelectedFrame = null;
+  let modalCurrentProject = null;
+  function openProjectDetail(project, focusReconstruct = false) {
     modalFrameUrls.forEach(u => URL.revokeObjectURL(u));
     modalFrameUrls = [];
+    modalCurrentProject = project;
+    modalSelectedFrame = null;
     $("modalTitle").textContent = project.name;
     const body = $("modalBody");
     body.replaceChildren();
+
+    const reconPanel = document.createElement("div");
+    reconPanel.className = "reconstruct-panel";
+    const rh = document.createElement("h4");
+    rh.textContent = "RECONSTRUCT 3D MODEL FROM A FRAME";
+    const rp = document.createElement("p");
+    rp.className = "hint";
+    rp.textContent = "Click a frame thumbnail below to mark it as the source. Then click Reconstruct. S2M runs Depth Anything in your browser to produce a low-poly displaced mesh of the visible surface. First run downloads ~25 MB model.";
+    const rbtn = document.createElement("button");
+    rbtn.className = "green";
+    rbtn.id = "reconstructBtn";
+    rbtn.textContent = "Reconstruct from selected frame";
+    rbtn.disabled = true;
+    rbtn.addEventListener("click", () => reconstructFromFrame(project, modalSelectedFrame));
+    reconPanel.append(rh, rp, rbtn);
+    body.appendChild(reconPanel);
 
     if (project.videoBlob) {
       const sec = document.createElement("div");
@@ -1641,12 +1955,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       const v = document.createElement("video");
       const url = URL.createObjectURL(project.videoBlob);
       modalFrameUrls.push(url);
-      v.src = url;
-      v.controls = true;
-      v.playsInline = true;
-      v.style.width = "100%";
-      v.style.borderRadius = "8px";
-      v.style.background = "#000";
+      v.src = url; v.controls = true; v.playsInline = true;
+      v.style.width = "100%"; v.style.borderRadius = "8px"; v.style.background = "#000";
       sec.append(h, v);
       body.appendChild(sec);
     }
@@ -1665,14 +1975,13 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       ["Resolution", project.width + " × " + project.height + " px"],
       ["Video file", project.videoBlob ? (project.videoType + ", " + (project.videoBlob.size / 1024 / 1024).toFixed(2) + " MB") : "None"],
       ["Frames size", (project.frames.reduce((n, f) => n + f.blob.size, 0) / 1024 / 1024).toFixed(2) + " MB"],
-      ["Avg sharpness", project.frames.length ? Math.round(project.frames.reduce((n, f) => n + (f.sharpness || 0), 0) / project.frames.length).toString() : "n/a"]
+      ["Avg sharpness", project.frames.length ? Math.round(project.frames.reduce((n, f) => n + (f.sharpness || 0), 0) / project.frames.length).toString() : "n/a"],
+      ["Masked frames", String(project.frames.filter(f => f.selection).length)]
     ];
     rows.forEach(([k, val]) => {
       const row = document.createElement("div");
-      const kEl = document.createElement("span");
-      kEl.textContent = k;
-      const vEl = document.createElement("span");
-      vEl.textContent = val;
+      const kEl = document.createElement("span"); kEl.textContent = k;
+      const vEl = document.createElement("span"); vEl.textContent = val;
       row.append(kEl, vEl);
       list.appendChild(row);
     });
@@ -1683,17 +1992,25 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       const frames = document.createElement("div");
       frames.className = "modal-section";
       const fh = document.createElement("h4");
-      fh.textContent = "SAMPLED FRAMES (" + project.frames.length + ")";
+      fh.textContent = "SAMPLED FRAMES · CLICK TO SELECT FOR RECONSTRUCTION (" + project.frames.length + ")";
       const grid = document.createElement("div");
       grid.className = "frame-grid";
+      let sharpest = project.frames[0];
+      for (const f of project.frames) if ((f.sharpness||0) > (sharpest.sharpness||0)) sharpest = f;
       project.frames.forEach(frame => {
         const tile = document.createElement("div");
         tile.className = "frame-thumb";
+        if (frame.id === sharpest.id) {
+          tile.classList.add("selected");
+          const mark = document.createElement("span");
+          mark.className = "reconstruct-mark";
+          mark.textContent = "BEST";
+          tile.appendChild(mark);
+        }
         const img = document.createElement("img");
         const url = URL.createObjectURL(frame.blob);
         modalFrameUrls.push(url);
-        img.src = url;
-        img.alt = "Frame " + frame.id;
+        img.src = url; img.alt = "Frame " + frame.id;
         const num = document.createElement("span");
         num.className = "frame-num";
         num.textContent = "#" + String(frame.id).padStart(3, "0");
@@ -1708,8 +2025,28 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         } else {
           tile.append(img, num, time);
         }
+        if (frame.selection) {
+          tile.style.outline = "1px solid rgba(163,230,53,0.6)";
+          tile.style.outlineOffset = "-3px";
+        }
+        tile.addEventListener("click", () => {
+          grid.querySelectorAll(".frame-thumb").forEach(t => {
+            t.classList.remove("selected");
+            const m = t.querySelector(".reconstruct-mark");
+            if (m) m.remove();
+          });
+          tile.classList.add("selected");
+          const newMark = document.createElement("span");
+          newMark.className = "reconstruct-mark";
+          newMark.textContent = "PICK";
+          tile.appendChild(newMark);
+          modalSelectedFrame = frame;
+          $("reconstructBtn").disabled = false;
+        });
         grid.appendChild(tile);
       });
+      modalSelectedFrame = sharpest;
+      $("reconstructBtn").disabled = false;
       frames.append(fh, grid);
       body.appendChild(frames);
     }
@@ -1719,9 +2056,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     const eh = document.createElement("h4");
     eh.textContent = "EXPORT";
     const btns = document.createElement("div");
-    btns.style.display = "flex";
-    btns.style.flexWrap = "wrap";
-    btns.style.gap = "8px";
+    btns.style.display = "flex"; btns.style.flexWrap = "wrap"; btns.style.gap = "8px";
     if (project.videoBlob) {
       const b = document.createElement("button");
       b.textContent = "Download video";
@@ -1752,22 +2087,193 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     body.appendChild(ex);
 
     $("projectModal").classList.add("show");
+
+    if (focusReconstruct) {
+      setTimeout(() => reconPanel.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    }
   }
   function closeProjectModal() {
     modalFrameUrls.forEach(u => URL.revokeObjectURL(u));
     modalFrameUrls = [];
+    modalSelectedFrame = null;
+    modalCurrentProject = null;
     $("projectModal").classList.remove("show");
+  }
+
+  // ===== In-browser depth reconstruction =====
+  let transformersModule = null;
+  let depthEstimator = null;
+  async function loadTransformers() {
+    if (transformersModule) return transformersModule;
+    $("viewerLoadingLabel").textContent = "Loading transformers.js library...";
+    transformersModule = await import("@huggingface/transformers");
+    return transformersModule;
+  }
+  async function getDepthEstimator() {
+    if (depthEstimator) return depthEstimator;
+    const tf = await loadTransformers();
+    $("viewerLoadingLabel").textContent = "Loading Depth Anything model (~25 MB, first time only)...";
+    depthEstimator = await tf.pipeline("depth-estimation", "Xenova/depth-anything-small-hf");
+    return depthEstimator;
+  }
+  async function reconstructFromFrame(project, frame) {
+    if (!frame) { notify("Select a frame first by clicking a thumbnail.", "warn"); return; }
+    if (!viewerInit) { notify("3D viewer is not available on this device.", "bad"); return; }
+    setReconStage(1);
+    showViewerLoading("Preparing frame...");
+    try {
+      const img = new Image();
+      const url = URL.createObjectURL(frame.blob);
+      img.src = url;
+      await img.decode();
+      setReconStage(2);
+      showViewerLoading("Running depth estimation...");
+      const estimator = await getDepthEstimator();
+      const result = await estimator(img);
+      URL.revokeObjectURL(url);
+      const depthData = result.depth.data;
+      const depthWidth = result.depth.width;
+      const depthHeight = result.depth.height;
+      setReconStage(3);
+      showViewerLoading("Building low-poly mesh...");
+      const imgCanvas = document.createElement("canvas");
+      imgCanvas.width = depthWidth;
+      imgCanvas.height = depthHeight;
+      const imgCtx = imgCanvas.getContext("2d", { willReadFrequently: true });
+      imgCtx.drawImage(img, 0, 0, depthWidth, depthHeight);
+      const imgData = imgCtx.getImageData(0, 0, depthWidth, depthHeight);
+      const mask = frame.selection ? buildMask(frame.selection, depthWidth, depthHeight) : null;
+      const geometry = depthToMesh(depthData, depthWidth, depthHeight, mask, imgData.data);
+      const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.7,
+        metalness: 0.05,
+        side: THREE.DoubleSide,
+        flatShading: true
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      clearCurrentModel();
+      scene.add(mesh);
+      currentModel = mesh;
+      fitCameraToObject(mesh);
+      setReconStage(4);
+      hideViewerLoading();
+      $("viewerOverlay").classList.add("hide");
+      $("viewerOverlay").classList.remove("show");
+      $("viewerStatus").textContent = "Reconstructed · " + project.name + " frame #" + frame.id;
+      let triCount = 0;
+      mesh.traverse(o => {
+        if (o.isMesh && o.geometry?.index) triCount += o.geometry.index.count / 3;
+      });
+      $("viewerInfo").textContent = "Reconstructed · " + Math.round(triCount).toLocaleString() + " tris";
+      $("resetView").disabled = false;
+      $("exportGlb").disabled = false;
+      $("clearModel").disabled = false;
+      closeProjectModal();
+      $("viewerCanvas").scrollIntoView({ behavior: "smooth", block: "center" });
+      notify("Reconstruction complete. This is a depth-based relief of the visible surface, not a full 3D scan. Use Export GLB to save.", "good");
+    } catch (err) {
+      console.error(err);
+      hideViewerLoading();
+      resetReconStages();
+      notify("Reconstruction failed: " + (err.message || "unknown error") + ". If the model failed to download, check your network connection.", "bad");
+    }
+  }
+  function depthToMesh(depthData, width, height, mask, colorData) {
+    const gridSize = 48;
+    const gridData = [];
+    for (let j = 0; j < gridSize; j++) {
+      for (let i = 0; i < gridSize; i++) {
+        const u = i / (gridSize - 1);
+        const v = j / (gridSize - 1);
+        const px = Math.min(width - 1, Math.floor(u * width));
+        const py = Math.min(height - 1, Math.floor(v * height));
+        const idx = py * width + px;
+        const depth = depthData[idx];
+        const maskValue = mask ? mask[idx] : 1;
+        gridData.push({
+          depth,
+          maskValue,
+          r: colorData ? colorData[idx * 4] / 255 : 0.7,
+          g: colorData ? colorData[idx * 4 + 1] / 255 : 0.7,
+          b: colorData ? colorData[idx * 4 + 2] / 255 : 0.7
+        });
+      }
+    }
+    let minD = Infinity, maxD = -Infinity;
+    for (const d of gridData) {
+      if (d.maskValue > 0.5) {
+        if (d.depth < minD) minD = d.depth;
+        if (d.depth > maxD) maxD = d.depth;
+      }
+    }
+    const range = (maxD - minD) || 1;
+    const positions = [];
+    const colors = [];
+    const uvs = [];
+    const indices = [];
+    const vertexMap = new Array(gridData.length).fill(-1);
+    for (let i = 0; i < gridData.length; i++) {
+      if (gridData[i].maskValue > 0.5) {
+        const gx = i % gridSize;
+        const gy = Math.floor(i / gridSize);
+        const u = gx / (gridSize - 1);
+        const v = gy / (gridSize - 1);
+        const x = u * 2 - 1;
+        const y = 1 - v * 2;
+        const z = ((gridData[i].depth - minD) / range) * 1.5 - 0.75;
+        positions.push(x, y, z);
+        colors.push(gridData[i].r, gridData[i].g, gridData[i].b);
+        uvs.push(u, v);
+        vertexMap[i] = positions.length / 3 - 1;
+      }
+    }
+    for (let j = 0; j < gridSize - 1; j++) {
+      for (let i = 0; i < gridSize - 1; i++) {
+        const tl = vertexMap[j * gridSize + i];
+        const tr = vertexMap[j * gridSize + i + 1];
+        const bl = vertexMap[(j + 1) * gridSize + i];
+        const br = vertexMap[(j + 1) * gridSize + i + 1];
+        if (tl >= 0 && tr >= 0 && bl >= 0 && br >= 0) {
+          indices.push(tl, bl, tr);
+          indices.push(tr, bl, br);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    const center = new THREE.Vector3();
+    geometry.boundingBox.getCenter(center);
+    geometry.translate(-center.x, -center.y, -center.z);
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+  function setReconStage(n) {
+    [1,2,3,4].forEach(i => $("stage" + i).classList.toggle("active", i === n));
+  }
+  function resetReconStages() {
+    [1,2,3,4].forEach(i => $("stage" + i).classList.remove("active"));
+  }
+  function showViewerLoading(label) {
+    $("viewerLoadingLabel").textContent = label;
+    $("viewerLoading").classList.add("show");
+  }
+  function hideViewerLoading() {
+    $("viewerLoading").classList.remove("show");
   }
 
   // ===== Export helpers =====
   function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
   async function exportFramesZip(project) {
@@ -1792,16 +2298,13 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
         createdAt: new Date(project.createdAt).toISOString(),
         duration: project.duration,
         scanType: project.scanType,
-        width: project.width,
-        height: project.height,
+        width: project.width, height: project.height,
         videoType: project.videoType || null,
         frameCount: project.frames.length,
         frames: project.frames.map(f => ({
-          id: f.id,
-          time: f.time,
-          sharpness: f.sharpness || 0,
-          width: f.width,
-          height: f.height,
+          id: f.id, time: f.time, sharpness: f.sharpness || 0,
+          width: f.width, height: f.height,
+          selection: f.selection || null,
           file: "frame-" + String(f.id).padStart(3, "0") + ".jpg"
         }))
       };
@@ -1824,23 +2327,18 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       application: "S2M — Scan to Model",
       projectCount: state.projects.length,
       projects: state.projects.map(p => ({
-        id: p.id,
-        name: p.name,
+        id: p.id, name: p.name,
         createdAt: new Date(p.createdAt).toISOString(),
-        duration: p.duration,
-        scanType: p.scanType,
-        width: p.width,
-        height: p.height,
+        duration: p.duration, scanType: p.scanType,
+        width: p.width, height: p.height,
         videoType: p.videoType || null,
         videoSize: p.videoBlob ? p.videoBlob.size : 0,
         frameCount: p.frames.length,
         framesSize: p.frames.reduce((n, f) => n + f.blob.size, 0),
         frames: p.frames.map(f => ({
-          id: f.id,
-          time: f.time,
-          sharpness: f.sharpness || 0,
-          width: f.width,
-          height: f.height
+          id: f.id, time: f.time, sharpness: f.sharpness || 0,
+          width: f.width, height: f.height,
+          selection: f.selection || null
         }))
       }))
     };
@@ -1908,12 +2406,12 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
     const fitDist = maxDim / (2 * Math.tan((camera3D.fov * Math.PI / 180) / 2)) * 1.8;
-    camera3D.position.set(center.x + fitDist * 0.6, center.y + fitDimSafe(fitDist) * 0.5, center.z + fitDist);
+    const safeDist = isFinite(fitDist) ? fitDist : 3;
+    camera3D.position.set(center.x + safeDist * 0.6, center.y + safeDist * 0.5, center.z + safeDist);
     camera3D.lookAt(center);
     controls.target.copy(center);
     controls.update();
   }
-  function fitDimSafe(d) { return isFinite(d) ? d : 1; }
   function clearCurrentModel() {
     if (currentModel) {
       scene.remove(currentModel);
@@ -1935,10 +2433,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     $("clearModel").disabled = true;
   }
   function loadModelFile(file) {
-    if (!viewerInit) {
-      notify("3D viewer is not available on this device.", "bad");
-      return;
-    }
+    if (!viewerInit) { notify("3D viewer is not available on this device.", "bad"); return; }
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     const reader = new FileReader();
     reader.onload = e => {
@@ -1948,8 +2443,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
           const loader = new GLTFLoader();
           loader.parse(e.target.result, "", gltf => {
             const model = gltf.scene;
-            scene.add(model);
-            currentModel = model;
+            scene.add(model); currentModel = model;
             fitCameraToObject(model);
             onViewerLoadSuccess(file, model);
           }, err => {
@@ -1965,8 +2459,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
               o.material = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.7, metalness: 0.1 });
             }
           });
-          scene.add(model);
-          currentModel = model;
+          scene.add(model); currentModel = model;
           fitCameraToObject(model);
           onViewerLoadSuccess(file, model);
         } else if (ext === "stl") {
@@ -1974,8 +2467,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
           const geom = loader.parse(e.target.result);
           geom.computeVertexNormals();
           const model = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.65, metalness: 0.1 }));
-          scene.add(model);
-          currentModel = model;
+          scene.add(model); currentModel = model;
           fitCameraToObject(model);
           onViewerLoadSuccess(file, model);
         } else {
@@ -1987,11 +2479,8 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       }
     };
     reader.onerror = () => notify("Could not read file.", "bad");
-    if (ext === "obj") {
-      reader.readAsText(file);
-    } else {
-      reader.readAsArrayBuffer(file);
-    }
+    if (ext === "obj") reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
   }
   function onViewerLoadSuccess(file, model) {
     $("viewerOverlay").classList.add("hide");
@@ -2069,6 +2558,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     initViewer();
     renderProjects();
     updateCameraUI();
+    resizeSelectionCanvas();
 
     $("startCamera").addEventListener("click", startCamera);
     $("stopCamera").addEventListener("click", async () => {
@@ -2116,6 +2606,18 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
       }
     });
 
+    $("selModeOff").addEventListener("click", () => setSelectionMode("off"));
+    $("selModeRect").addEventListener("click", () => setSelectionMode("rectangle"));
+    $("selModeLasso").addEventListener("click", () => setSelectionMode("lasso"));
+    $("clearSelection").addEventListener("click", clearSelection);
+    $("applySelection").addEventListener("click", toggleApplyToCaptures);
+
+    selectionCanvas.addEventListener("pointerdown", onSelectionPointerDown);
+    selectionCanvas.addEventListener("pointermove", onSelectionPointerMove);
+    selectionCanvas.addEventListener("pointerup", onSelectionPointerUp);
+    selectionCanvas.addEventListener("pointercancel", onSelectionPointerUp);
+    selectionCanvas.addEventListener("dblclick", onSelectionDoubleClick);
+
     $("clearProjects").addEventListener("click", async () => {
       if (!state.projects.length) return;
       if (!confirm("Delete every saved scan project from this browser? Download videos you want to keep first.")) return;
@@ -2144,9 +2646,9 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     $("exportGlb").addEventListener("click", exportGLB);
     $("clearModel").addEventListener("click", () => {
       clearCurrentModel();
+      resetReconStages();
       notify("Model cleared.");
     });
-
     const dropZone = $("viewerCanvas").parentElement;
     dropZone.addEventListener("dragover", e => { e.preventDefault(); });
     dropZone.addEventListener("drop", e => {
@@ -2172,6 +2674,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
     window.addEventListener("resize", () => {
       if (state.stream) processEdgeFrame();
+      resizeSelectionCanvas();
       onViewerResize();
     });
   }

@@ -5,329 +5,660 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="S2M — Scan to Model. Capture objects and organize scanning sessions for 3D reconstruction.">
+<meta name="description" content="S2M — Scan to Model. Capture real-world objects, organize scan projects, view 3D models, and prepare data for photogrammetry reconstruction.">
 <title>S2M — Scan to Model</title>
+
+<!-- JSZip for ZIP exports (CDN dependency) -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+<!-- Three.js ES module importmap (CDN dependency) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
 <style>
 :root {
   color-scheme: dark;
   --black: #000000;
   --white: #ffffff;
   --gray: #888888;
-  --dark-gray: #242424;
+  --gray-2: #555555;
+  --dark-gray: #1c1c1c;
+  --panel: #0a0a0a;
+  --line: #242424;
   --green: #a3e635;
+  --green-dim: rgba(163, 230, 53, 0.18);
+  --green-glow: rgba(163, 230, 53, 0.35);
+  --red: #f87171;
+  --radius: 12px;
+  --radius-sm: 8px;
 }
 * { box-sizing: border-box; }
+html, body { height: 100%; }
 html { background: var(--black); }
 body {
   margin: 0;
   background: var(--black);
   color: var(--white);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button {
   background: var(--black);
   color: var(--white);
-  border: 1px solid var(--dark-gray);
-  padding: 12px 15px;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 600;
-  transition: border-color .15s, background .15s, opacity .15s;
+  font-size: 13px;
+  letter-spacing: -0.1px;
+  transition: border-color .15s, background .15s, opacity .15s, transform .05s;
+  -webkit-user-select: none;
+  user-select: none;
 }
 button:hover:not(:disabled) { border-color: var(--gray); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: .35; cursor: not-allowed; }
-button:focus-visible, select:focus-visible {
+button:focus-visible, select:focus-visible, input:focus-visible, .toggle:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 3px;
 }
-button.primary {
-  background: var(--white);
-  color: var(--black);
-  border-color: var(--white);
-}
-button.primary:hover:not(:disabled) {
-  background: var(--green);
-  border-color: var(--green);
-}
-button.green {
-  background: var(--green);
-  color: var(--black);
-  border-color: var(--green);
-}
-button.danger { color: var(--white); }
+button.primary { background: var(--white); color: var(--black); border-color: var(--white); }
+button.primary:hover:not(:disabled) { background: var(--green); border-color: var(--green); color: var(--black); }
+button.green { background: var(--green); color: var(--black); border-color: var(--green); }
+button.green:hover:not(:disabled) { background: #b9eb55; border-color: #b9eb55; }
+button.danger { color: var(--red); border-color: #3a2222; }
+button.danger:hover:not(:disabled) { background: #2a1414; border-color: var(--red); }
+button.ghost { background: transparent; border-color: var(--line); }
+
 header {
-  height: 65px;
-  padding: 0 20px;
+  height: 60px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--dark-gray);
-  background: var(--black);
+  border-bottom: 1px solid var(--line);
+  background: rgba(0,0,0,0.85);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 50;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand-mark {
-  height: 34px;
-  width: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--gray);
+  height: 32px; width: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  font-weight: 900;
-  font-size: 12px;
-  letter-spacing: -1px;
+  background: var(--panel);
 }
-.brand-name { font-size: 15px; font-weight: 750; letter-spacing: -.4px; }
-.brand-sub { font-size: 10px; color: var(--gray); margin-top: 3px; }
-.header-right { display: flex; align-items: center; gap: 10px; }
+.brand-name { font-size: 14px; font-weight: 800; letter-spacing: -0.3px; line-height: 1.1; }
+.brand-sub { font-size: 9px; color: var(--gray); letter-spacing: 1.5px; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
 .pill {
-  font-size: 10px;
-  color: var(--gray);
-  border: 1px solid var(--dark-gray);
-  border-radius: 5px;
-  padding: 5px 7px;
+  font-size: 9px; color: var(--gray);
+  border: 1px solid var(--line); border-radius: 5px;
+  padding: 5px 8px; letter-spacing: 0.5px;
+  font-weight: 700;
 }
-main { width: min(1180px, 100%); margin: auto; padding: 28px 20px 70px; }
-.topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 24px;
-}
+.pill.on { color: var(--green); border-color: rgba(163,230,53,0.4); }
+
+main { width: min(1280px, 100%); margin: 0 auto; padding: 24px 16px 80px; }
 .eyebrow {
-  color: var(--green);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 2px;
+  color: var(--green); font-size: 10px;
+  font-weight: 800; letter-spacing: 2px;
 }
 h1 {
-  font-size: clamp(28px, 5vw, 43px);
-  line-height: 1.1;
-  letter-spacing: -2px;
-  margin: 9px 0;
+  font-size: clamp(26px, 5vw, 40px);
+  line-height: 1.05; letter-spacing: -1.8px;
+  margin: 8px 0 0;
+  font-weight: 800;
 }
 .subtitle {
-  max-width: 540px;
-  color: var(--gray);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 0;
+  max-width: 580px; color: var(--gray);
+  font-size: 13px; line-height: 1.7;
+  margin: 12px 0 0;
 }
-.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
-.section-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+
+.notice {
+  display: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  font-size: 12px; line-height: 1.6;
+  margin-bottom: 18px;
+  background: var(--panel);
 }
-.section-label h2 { margin: 0; font-size: 13px; font-weight: 700; }
-.section-label span { font-size: 11px; color: var(--gray); }
+.notice.show { display: block; }
+.notice.good { border-color: rgba(163,230,53,0.4); }
+.notice.good::before { content: "✓ "; color: var(--green); font-weight: 800; }
+.notice.bad { border-color: rgba(248,113,113,0.4); }
+.notice.bad::before { content: "! "; color: var(--red); font-weight: 800; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 22px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.stat { padding: 14px 12px; min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat strong {
+  font-size: clamp(16px, 4vw, 22px);
+  display: block; letter-spacing: -0.8px;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+.stat span {
+  display: block; color: var(--gray);
+  font-size: 9px; letter-spacing: 0.7px; margin-top: 5px;
+}
+
+.section { margin-bottom: 32px; }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.section-head h2 {
+  margin: 0; font-size: 13px; font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.section-head .meta { font-size: 10px; color: var(--gray); letter-spacing: 0.5px; }
+
+.capture-layout {
+  display: grid; gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+}
 .camera-shell {
-  border: 1px solid var(--dark-gray);
-  background: var(--black);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .camera {
-  background: var(--black);
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 4;
   max-height: 70vh;
-  display: grid;
-  place-items: center;
+  background: #000;
   overflow: hidden;
 }
-video#liveVideo {
-  display: none;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.camera video#liveVideo {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
 }
-.camera.active video#liveVideo { display: block; }
-.camera-placeholder { padding: 24px; text-align: center; }
+.camera:not(.active) video#liveVideo { display: none; }
+.edge-overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.center-guide {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  display: none;
+}
+.center-guide.show { display: block; }
+.center-guide::before, .center-guide::after {
+  content: ""; position: absolute;
+  background: rgba(163, 230, 53, 0.5);
+}
+.center-guide::before {
+  left: 10%; right: 10%; top: 50%; height: 1px;
+}
+.center-guide::after {
+  top: 10%; bottom: 10%; left: 50%; width: 1px;
+}
+.center-guide .frame {
+  position: absolute;
+  top: 12%; left: 12%; right: 12%; bottom: 12%;
+  border: 1px dashed rgba(163, 230, 53, 0.4);
+  border-radius: 6px;
+}
+.camera-placeholder {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px; text-align: center;
+}
 .camera.active .camera-placeholder { display: none; }
 .camera-placeholder .symbol {
-  width: 54px;
-  height: 54px;
-  margin: 0 auto 18px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--dark-gray);
+  width: 60px; height: 60px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  font-size: 24px;
+  font-size: 26px; color: var(--gray);
+  margin-bottom: 16px;
 }
-.camera-placeholder strong { font-size: 15px; }
+.camera-placeholder strong { font-size: 14px; }
 .camera-placeholder p {
-  color: var(--gray);
-  max-width: 290px;
-  margin: 9px auto 0;
-  font-size: 12px;
-  line-height: 1.7;
+  color: var(--gray); max-width: 320px;
+  margin: 8px auto 0;
+  font-size: 12px; line-height: 1.6;
 }
 .rec-indicator {
-  display: none;
   position: absolute;
-  top: 13px;
-  left: 13px;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
+  top: 12px; left: 12px;
+  display: none; align-items: center; gap: 7px;
+  padding: 6px 10px;
   border-radius: 5px;
-  border: 1px solid var(--white);
-  background: var(--black);
-  color: var(--white);
-  font-size: 11px;
-  font-weight: 700;
+  border: 1px solid rgba(163,230,53,0.4);
+  background: rgba(0,0,0,0.7);
+  color: var(--green);
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 1px;
+  backdrop-filter: blur(4px);
 }
 .rec-indicator.active { display: flex; }
 .rec-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
+  width: 7px; height: 7px;
+  border-radius: 50%; background: var(--green);
+  animation: pulse 1.4s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
 }
 .camera-counter {
   position: absolute;
-  right: 12px;
-  top: 13px;
-  background: var(--black);
-  border: 1px solid var(--dark-gray);
-  padding: 7px 9px;
+  right: 10px; top: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid var(--line);
+  padding: 6px 9px;
   border-radius: 5px;
-  font-size: 10px;
-  color: var(--white);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.3px;
+  backdrop-filter: blur(4px);
 }
 .camera-bottom {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: center;
-  padding: 11px 13px;
-  border-top: 1px solid var(--dark-gray);
+  display: flex; flex-wrap: wrap; gap: 10px;
+  justify-content: space-between; align-items: center;
+  padding: 10px 13px;
+  border-top: 1px solid var(--line);
   font-size: 11px;
-  color: var(--gray);
 }
 .live-status { color: var(--gray); }
 .live-status.on { color: var(--green); }
-.controls { padding-top: 13px; display: grid; gap: 10px; }
+.timer {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.controls {
+  padding: 13px;
+  display: grid; gap: 10px;
+  border-top: 1px solid var(--line);
+}
 .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.button-row button { min-height: 48px; }
-select {
+.button-row button { min-height: 46px; }
+.hint { font-size: 11px; color: var(--gray); line-height: 1.6; margin: 2px 0; }
+
+.settings-grid {
+  display: grid; gap: 12px;
+  padding: 14px;
+}
+.field { display: block; }
+.field-label {
+  display: block; font-size: 10px;
+  color: var(--gray); margin-bottom: 6px;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+select, input[type="text"], input[type="number"] {
   width: 100%;
   background: var(--black);
   color: var(--white);
-  border: 1px solid var(--dark-gray);
-  border-radius: 8px;
-  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  font-size: 13px;
+  appearance: none;
+  -webkit-appearance: none;
 }
-.field-label { display: block; font-size: 11px; color: var(--gray); margin-bottom: 7px; }
-.settings { display: grid; grid-template-columns: 1fr; gap: 12px; }
-.hint { font-size: 11px; color: var(--gray); line-height: 1.7; margin: 2px 0; }
-.notice {
-  display: none;
-  border: 1px solid var(--dark-gray);
-  border-radius: 8px;
-  padding: 12px 13px;
-  font-size: 12px;
-  line-height: 1.65;
-  margin-bottom: 15px;
-  color: var(--white);
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M5 6L0 0h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 30px;
+}
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 4px 0;
+}
+.toggle-row label { font-size: 12px; }
+.toggle {
+  position: relative; width: 36px; height: 20px;
+  background: var(--line); border-radius: 12px;
+  cursor: pointer; flex-shrink: 0;
+  transition: background .15s;
+  border: none;
+}
+.toggle::after {
+  content: ""; position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: var(--white); border-radius: 50%;
+  transition: transform .15s;
+}
+.toggle.on { background: var(--green); }
+.toggle.on::after { transform: translateX(16px); background: var(--black); }
+.divider { height: 1px; background: var(--line); margin: 14px 0; }
+
+.guidelines {
+  display: grid; gap: 8px;
+  padding: 14px;
+}
+.guide-item {
+  display: flex; gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--black);
 }
-.notice.show { display: block; }
-.notice.good { border-color: var(--green); }
-.notice.bad { border-color: var(--gray); }
-.stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--dark-gray);
-  border-radius: 10px;
-  margin-bottom: 24px;
+.guide-num {
+  font-size: 10px; font-weight: 800;
+  color: var(--green);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+  padding-top: 1px;
 }
-.stat { padding: 15px 12px; min-width: 0; }
-.stat + .stat { border-left: 1px solid var(--dark-gray); }
-.stat strong { font-size: clamp(17px, 4vw, 24px); display: block; letter-spacing: -1px; overflow-wrap: anywhere; }
-.stat span { display: block; color: var(--gray); font-size: 9px; letter-spacing: .7px; margin-top: 5px; }
-.projects-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 35px 0 14px;
+.guide-text { font-size: 12px; line-height: 1.55; color: var(--white); }
+.guide-text small { display: block; color: var(--gray); font-size: 11px; margin-top: 3px; }
+
+.project-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: 1fr;
 }
-.projects-head h2 { font-size: 18px; letter-spacing: -.5px; margin: 0; }
-.projects-head p { font-size: 11px; color: var(--gray); margin: 5px 0 0; }
-.project-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
-.project {
-  border: 1px solid var(--dark-gray);
-  border-radius: 10px;
+.project-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   overflow: hidden;
+  background: var(--panel);
   min-width: 0;
 }
-.project-video {
-  background: var(--black);
+.project-thumb {
+  position: relative;
   aspect-ratio: 16 / 9;
-  display: grid;
-  place-items: center;
+  background: var(--black);
+  display: grid; place-items: center;
+  overflow: hidden;
+  cursor: pointer;
 }
-.project-video video { width: 100%; height: 100%; object-fit: contain; }
-.project-video .no-video { color: var(--gray); font-size: 12px; padding: 20px; text-align: center; }
-.project-info { padding: 14px; }
-.project-title-row { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
-.project-title-row strong { font-size: 13px; overflow-wrap: anywhere; }
+.project-thumb video, .project-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.project-thumb .placeholder {
+  color: var(--gray); font-size: 11px;
+  text-align: center; padding: 18px;
+}
 .project-tag {
-  font-size: 9px;
-  border: 1px solid var(--dark-gray);
-  padding: 4px 6px;
-  border-radius: 4px;
-  color: var(--gray);
-  white-space: nowrap;
+  position: absolute; top: 8px; left: 8px;
+  font-size: 9px; font-weight: 700;
+  padding: 4px 7px; border-radius: 4px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(163,230,53,0.4);
+  color: var(--green);
+  letter-spacing: 0.5px;
+  backdrop-filter: blur(4px);
 }
-.project-meta { color: var(--gray); font-size: 11px; margin-top: 7px; line-height: 1.6; }
-.project-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
-.project-actions button { font-size: 10px; padding: 9px 10px; }
-.empty {
-  border: 1px dashed var(--dark-gray);
-  border-radius: 10px;
+.project-tag.still { color: var(--white); border-color: var(--line); }
+.project-info { padding: 12px 14px; }
+.project-name {
+  font-size: 13px; font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.project-meta {
+  color: var(--gray); font-size: 11px;
+  margin-top: 6px; line-height: 1.55;
+}
+.project-actions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 11px;
+}
+.project-actions button {
+  font-size: 10px; padding: 8px 10px;
+  border-radius: 6px;
+}
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 36px 18px;
   text-align: center;
-  padding: 34px 16px;
   color: var(--gray);
   font-size: 12px;
-  line-height: 1.8;
 }
-.empty strong { display: block; color: var(--white); margin-bottom: 5px; font-size: 13px; }
-.footer {
-  border-top: 1px solid var(--dark-gray);
-  margin-top: 48px;
-  padding-top: 20px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.empty-state strong {
+  display: block; color: var(--white);
+  margin-bottom: 6px; font-size: 13px;
+}
+
+.viewer-shell {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel);
+}
+.viewer-canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #050505;
+  overflow: hidden;
+}
+#viewerCanvas {
+  display: block;
+  width: 100%; height: 100%;
+}
+.viewer-overlay {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  text-align: center;
   color: var(--gray);
-  font-size: 10px;
-  line-height: 1.8;
+  font-size: 12px;
+  padding: 20px;
+  pointer-events: none;
+  line-height: 1.6;
+}
+.viewer-overlay.show { display: grid; }
+.viewer-overlay.hide { display: none; }
+.viewer-overlay strong { color: var(--white); font-size: 13px; display: block; margin-bottom: 6px; }
+.viewer-controls {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  align-items: center;
+}
+.viewer-info {
+  font-size: 11px; color: var(--gray);
+  margin-left: auto;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+}
+
+.recon-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  background: var(--panel);
+}
+.recon-status {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--gray);
+  flex-shrink: 0;
+}
+.status-dot.offline { background: var(--gray); }
+.recon-text strong { font-size: 13px; display: block; }
+.recon-text span { font-size: 11px; color: var(--gray); display: block; margin-top: 2px; line-height: 1.55; }
+.recon-stages {
+  display: grid; gap: 8px;
+  margin-top: 14px;
+}
+.recon-stage {
+  display: flex; gap: 12px; align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: var(--black);
+}
+.recon-stage .stage-num {
+  font-size: 10px; font-weight: 800;
+  color: var(--green); flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+.recon-stage .stage-body strong { font-size: 12px; display: block; }
+.recon-stage .stage-body span { color: var(--gray); font-size: 11px; line-height: 1.5; display: block; margin-top: 2px; }
+.recon-note {
+  font-size: 11px; color: var(--gray);
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  z-index: 100;
+  padding: 20px;
+  overflow-y: auto;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.modal.show { display: flex; align-items: flex-start; justify-content: center; }
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-width: 900px; width: 100%;
+  margin: auto;
+  overflow: hidden;
+}
+.modal-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.modal-head h3 { margin: 0; font-size: 14px; }
+.modal-close {
+  background: transparent; border: 1px solid var(--line);
+  padding: 6px 12px; border-radius: 6px;
+  font-size: 12px;
+}
+.modal-body { padding: 16px 18px 24px; }
+.modal-section { margin-bottom: 22px; }
+.modal-section h4 {
+  font-size: 11px; color: var(--gray);
+  margin: 0 0 10px;
+  letter-spacing: 1px;
+}
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.frame-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--black);
+}
+.frame-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.frame-thumb .frame-num {
+  position: absolute; bottom: 4px; left: 4px;
+  font-size: 9px; padding: 2px 5px;
+  background: rgba(0,0,0,0.85);
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+}
+.frame-thumb .frame-time {
+  position: absolute; top: 4px; right: 4px;
+  font-size: 9px; padding: 2px 5px;
+  background: rgba(0,0,0,0.85);
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+}
+.frame-thumb .sharpness {
+  position: absolute; bottom: 4px; right: 4px;
+  font-size: 9px; padding: 2px 5px;
+  background: rgba(0,0,0,0.85);
+  color: var(--green);
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+}
+.meta-list {
+  display: grid; gap: 0;
+  font-size: 12px;
+}
+.meta-list div {
+  display: flex; justify-content: space-between;
+  gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.meta-list div:last-child { border-bottom: none; }
+.meta-list div span:first-child { color: var(--gray); }
+.meta-list div span:last-child { font-weight: 600; overflow-wrap: anywhere; text-align: right; }
+
+.footer {
+  border-top: 1px solid var(--line);
+  margin-top: 40px;
+  padding: 22px 0 0;
+  display: flex; justify-content: space-between;
+  gap: 12px; color: var(--gray);
+  font-size: 10px; line-height: 1.7;
+  flex-wrap: wrap;
 }
 .footer strong { color: var(--white); }
-@media (min-width: 800px) {
-  header { padding: 0 32px; }
-  main { padding: 42px 32px 80px; }
-  .layout { grid-template-columns: minmax(0, 1.65fr) minmax(260px, .75fr); align-items: start; gap: 30px; }
+
+@media (min-width: 880px) {
+  header { padding: 0 28px; }
+  main { padding: 32px 28px 80px; }
+  .capture-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.85fr);
+    align-items: start; gap: 22px;
+  }
+  .camera { aspect-ratio: 4 / 3; max-height: 65vh; }
   .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .camera { aspect-ratio: 4 / 3; }
+  .settings-grid { grid-template-columns: 1fr 1fr; }
+  .guidelines { grid-template-columns: 1fr 1fr; }
 }
-@media (max-width: 380px) {
+@media (min-width: 1200px) {
+  .project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .guidelines { grid-template-columns: 1fr 1fr 1fr; }
+}
+@media (max-width: 400px) {
   header { padding: 0 12px; }
-  main { padding: 22px 12px 55px; }
+  main { padding: 20px 12px 60px; }
   .pill { display: none; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat:nth-child(3), .stat:nth-child(4) { border-top: 1px solid var(--line); }
+  .stat:nth-child(odd) { border-right: 1px solid var(--line); }
+  .stat:nth-child(even) { border-left: none; }
   .button-row { grid-template-columns: 1fr; }
 }
 </style>
@@ -335,48 +666,58 @@ select {
 <body>
 <header>
   <div class="brand">
-    <div class="brand-mark">S2M</div>
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+        <path d="M3 8V5a2 2 0 0 1 2-2h3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M21 8V5a2 2 0 0 0-2-2h-3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M3 16v3a2 2 0 0 0 2 2h3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M21 16v3a2 2 0 0 1-2 2h-3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="3" y1="12" x2="21" y2="12" stroke="#a3e635" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="1.5" fill="#a3e635"/>
+      </svg>
+    </div>
     <div>
-      <div class="brand-name">Scan to Model</div>
-      <div class="brand-sub">SPATIAL CAPTURE WORKSPACE</div>
+      <div class="brand-name">S2M</div>
+      <div class="brand-sub">SCAN TO MODEL</div>
     </div>
   </div>
   <div class="header-right">
-    <span class="pill">DARK MODE</span>
-    <span class="pill">S2M</span>
+    <span class="pill" id="cameraPill">CAMERA OFF</span>
+    <span class="pill" id="storagePill">LOCAL</span>
   </div>
 </header>
 
 <main>
-  <div class="topline">
-    <div>
-      <div class="eyebrow">WORKSPACE / SCANNER</div>
-      <h1>Capture reality.</h1>
-      <p class="subtitle">Record an object from multiple angles. S2M automatically samples frames and organizes each scan into a single project, ready for the 3D reconstruction workflow.</p>
-    </div>
-  </div>
+  <div class="eyebrow">WORKSPACE / SCANNER</div>
+  <h1>Capture reality.</h1>
+  <p class="subtitle">Record objects from multiple angles. S2M samples frames automatically, organizes each scan into a project, and prepares your data for 3D reconstruction. A live green edge overlay helps you see which surfaces the camera is capturing.</p>
 
   <div id="notice" class="notice" role="status" aria-live="polite"></div>
 
   <div class="stats">
-    <div class="stat"><strong id="projectCount">0</strong><span>SCAN PROJECTS</span></div>
-    <div class="stat"><strong id="totalFrames">0</strong><span>SAMPLED FRAMES</span></div>
-    <div class="stat"><strong id="workspaceStatus">READY</strong><span>WORKSPACE STATUS</span></div>
+    <div class="stat"><strong id="statProjects">0</strong><span>SCAN PROJECTS</span></div>
+    <div class="stat"><strong id="statFrames">0</strong><span>SAMPLED FRAMES</span></div>
+    <div class="stat"><strong id="statDuration">00:00</strong><span>LAST SCAN DURATION</span></div>
+    <div class="stat"><strong id="statStatus">READY</strong><span>WORKSPACE</span></div>
   </div>
 
-  <div class="layout">
-    <section>
-      <div class="section-label">
-        <h2>01 / Live camera</h2>
-        <span id="cameraState">Camera offline</span>
+  <div class="capture-layout">
+    <section class="section">
+      <div class="section-head">
+        <h2>01 / Live capture</h2>
+        <span class="meta" id="cameraState">Camera offline</span>
       </div>
       <div class="camera-shell">
         <div id="camera" class="camera">
           <video id="liveVideo" autoplay muted playsinline></video>
+          <canvas id="edgeOverlay" class="edge-overlay"></canvas>
+          <div id="centerGuide" class="center-guide">
+            <div class="frame"></div>
+          </div>
           <div class="camera-placeholder">
             <div class="symbol">◎</div>
             <strong>Camera viewport</strong>
-            <p>Start your scan to activate the camera. Keep the object in view and move slowly around it.</p>
+            <p>Start the camera to begin. The live green edge overlay and an optional framing guide help you keep the object in view. Camera access requires HTTPS or localhost.</p>
           </div>
           <div id="recIndicator" class="rec-indicator">
             <span class="rec-dot"></span><span>RECORDING</span>
@@ -385,154 +726,362 @@ select {
         </div>
         <div class="camera-bottom">
           <span id="liveStatus" class="live-status">No active camera</span>
-          <span id="timer">00:00</span>
+          <span id="timer" class="timer">00:00</span>
         </div>
-      </div>
-
-      <div class="controls">
-        <div class="button-row">
-          <button id="startCamera" class="primary">Start camera</button>
-          <button id="stopCamera" disabled>Stop camera</button>
+        <div class="controls">
+          <div class="button-row">
+            <button id="startCamera" class="primary">Start camera</button>
+            <button id="stopCamera" disabled>Stop camera</button>
+          </div>
+          <button id="startScan" class="green" disabled>Start scan recording</button>
+          <div class="button-row">
+            <button id="captureStill" disabled>Capture still</button>
+            <button id="stopScan" disabled>Stop and save scan</button>
+          </div>
+          <p class="hint">Starting a scan records video and automatically samples still frames at the chosen interval. Stop the scan to save it as one project. Use "Capture still" for a single-frame project.</p>
         </div>
-        <button id="startScan" class="green" disabled>Start scan recording</button>
-        <button id="stopScan" disabled>Stop and save scan</button>
-        <p class="hint">Starting a scan begins video recording and automatic frame sampling every second. Stop the scan to create a project. Keep the object stationary and move the camera around it.</p>
       </div>
     </section>
 
-    <aside>
-      <div class="section-label">
+    <aside class="section">
+      <div class="section-head">
         <h2>02 / Capture settings</h2>
-        <span>LIVE</span>
+        <span class="meta">LIVE</span>
       </div>
-      <div class="camera-shell" style="padding:15px">
-        <div class="settings">
-          <div>
+      <div class="camera-shell">
+        <div class="settings-grid">
+          <div class="field">
+            <label class="field-label" for="projectName">Project name (optional)</label>
+            <input type="text" id="projectName" placeholder="auto-named on save" autocomplete="off">
+          </div>
+          <div class="field">
             <label class="field-label" for="cameraSelect">Camera device</label>
             <select id="cameraSelect">
               <option value="">Default / rear camera</option>
             </select>
           </div>
-          <div>
-            <label class="field-label" for="sampleRate">Automatic sampling</label>
-            <select id="sampleRate">
-              <option value="1000">Every 1 second</option>
-              <option value="1500">Every 1.5 seconds</option>
-              <option value="2000">Every 2 seconds</option>
-            </select>
-          </div>
-          <div>
-            <label class="field-label" for="quality">Video quality</label>
+          <div class="field">
+            <label class="field-label" for="quality">Capture resolution</label>
             <select id="quality">
-              <option value="720">HD · 720p target</option>
+              <option value="480">SD · 480p target</option>
+              <option value="720" selected>HD · 720p target</option>
               <option value="1080">Full HD · 1080p target</option>
             </select>
           </div>
+          <div class="field">
+            <label class="field-label" for="sampleRate">Frame sampling interval</label>
+            <select id="sampleRate">
+              <option value="500">Every 0.5 seconds</option>
+              <option value="1000" selected>Every 1 second</option>
+              <option value="2000">Every 2 seconds</option>
+              <option value="3000">Every 3 seconds</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="videoQuality">Video quality (bitrate)</label>
+            <select id="videoQuality">
+              <option value="balanced" selected>Balanced · ~2.5 Mbps</option>
+              <option value="high">High · ~5 Mbps</option>
+              <option value="small">Smaller file · ~1 Mbps</option>
+            </select>
+          </div>
+          <div class="divider"></div>
+          <div class="toggle-row">
+            <label for="toggleEdge">Live edge overlay</label>
+            <div id="toggleEdge" class="toggle on" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+          <div class="toggle-row">
+            <label for="toggleGuide">Center framing guide</label>
+            <div id="toggleGuide" class="toggle on" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+          <div class="toggle-row">
+            <label for="toggleSample">Auto frame sampling</label>
+            <div id="toggleSample" class="toggle on" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
         </div>
-        <div style="height:1px;background:var(--dark-gray);margin:18px 0"></div>
-        <div class="eyebrow">SCAN GUIDELINES</div>
-        <p class="hint">01. Use even lighting.</p>
-        <p class="hint">02. Keep the entire object in view.</p>
-        <p class="hint">03. Move slowly and smoothly.</p>
-        <p class="hint">04. Capture overlapping viewpoints.</p>
-        <p class="hint">05. Include different heights.</p>
-        <p class="hint">06. Avoid reflective or transparent surfaces when possible.</p>
-        <div style="height:1px;background:var(--dark-gray);margin:18px 0"></div>
-        <div class="eyebrow">RECONSTRUCTION STATUS</div>
-        <p class="hint">Frame collection is enabled. Photogrammetry, mesh reconstruction, and GLB export will require the dedicated 3D reconstruction engine.</p>
       </div>
     </aside>
   </div>
 
-  <div class="projects-head">
-    <div>
-      <h2>Scan projects</h2>
-      <p>Each recording is stored as one project.</p>
+  <section class="section">
+    <div class="section-head">
+      <h2>03 / Scanning guidelines</h2>
+      <span class="meta">READ BEFORE FIRST SCAN</span>
     </div>
-    <button id="clearProjects" disabled>Clear all</button>
-  </div>
-  <div id="projects" class="project-grid"></div>
-  <div id="empty" class="empty">
-    <strong>No scan projects yet</strong>
-    Your completed recordings will appear here, each with its own video and frame collection.
-  </div>
+    <div class="guidelines">
+      <div class="guide-item"><span class="guide-num">01</span><div class="guide-text">Use soft, even lighting.<small>Avoid harsh reflections, flickering lights, and moving shadows that confuse feature matching.</small></div></div>
+      <div class="guide-item"><span class="guide-num">02</span><div class="guide-text">Keep the whole object visible.<small>Leave space around its outline. Do not cut off the top, bottom, or sides of the object.</small></div></div>
+      <div class="guide-item"><span class="guide-num">03</span><div class="guide-text">Move slowly and smoothly.<small>Keep neighboring views overlapping by at least 50%. Sudden motion causes blur and dropped frames.</small></div></div>
+      <div class="guide-item"><span class="guide-num">04</span><div class="guide-text">Capture multiple viewpoints.<small>Sweep around the object at one height, then repeat at higher and lower angles when practical.</small></div></div>
+      <div class="guide-item"><span class="guide-num">05</span><div class="guide-text">Keep the object sharp.<small>Avoid motion blur. Maintain a reasonably consistent distance from the object throughout the scan.</small></div></div>
+      <div class="guide-item"><span class="guide-num">06</span><div class="guide-text">Favor textured, matte surfaces.<small>Plain, reflective, or transparent objects are harder for feature-matching reconstruction.</small></div></div>
+      <div class="guide-item"><span class="guide-num">07</span><div class="guide-text">Capture complete coverage.<small>Include all visible sides, the top, and any accessible surfaces of the object.</small></div></div>
+      <div class="guide-item"><span class="guide-num">08</span><div class="guide-text">Stop when you have enough.<small>A typical scan needs 30 to 100 sharp, overlapping frames. Too few frames reduces reconstruction quality.</small></div></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div><h2>04 / Scan projects</h2></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="exportIndex" class="ghost" disabled>Export JSON index</button>
+        <button id="clearProjects" class="danger" disabled>Clear all</button>
+      </div>
+    </div>
+    <div id="projects" class="project-grid"></div>
+    <div id="emptyState" class="empty-state">
+      <strong>No scan projects yet</strong>
+      Completed recordings appear here. Each project stores the original video, sampled frames, and metadata in your browser's local IndexedDB.
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>05 / 3D model viewer</h2>
+      <span class="meta" id="viewerStatus">No model loaded</span>
+    </div>
+    <div class="viewer-shell">
+      <div class="viewer-canvas-wrap">
+        <canvas id="viewerCanvas"></canvas>
+        <div id="viewerOverlay" class="viewer-overlay show">
+          <div>
+            <strong>Import a 3D model</strong>
+            Drag and drop a .glb, .gltf, .obj, or .stl file here, or use the import button.
+            <br><br>
+            <span style="font-size:10px;color:var(--gray);">Orbit · Zoom · Pan · Reset · Export GLB</span>
+          </div>
+        </div>
+      </div>
+      <div class="viewer-controls">
+        <input type="file" id="modelFile" accept=".glb,.gltf,.obj,.stl" hidden>
+        <button id="importModel" class="primary">Import model</button>
+        <button id="resetView" disabled>Reset view</button>
+        <button id="exportGlb" class="green" disabled>Export GLB</button>
+        <button id="clearModel" class="ghost" disabled>Clear</button>
+        <div class="viewer-info" id="viewerInfo"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>06 / Reconstruction</h2>
+      <span class="meta">PHOTGRAMMETRY PIPELINE</span>
+    </div>
+    <div class="recon-panel">
+      <div class="recon-status">
+        <div class="status-dot offline" id="reconDot"></div>
+        <div class="recon-text">
+          <strong id="reconTitle">Reconstruction engine not connected</strong>
+          <span id="reconSub">S2M prepares your capture data locally. A separate reconstruction backend is required to generate real 3D geometry. No fake or sample mesh is produced.</span>
+        </div>
+      </div>
+      <div class="recon-stages">
+        <div class="recon-stage"><span class="stage-num">01</span><div class="stage-body"><strong>Image validation</strong><span>Check sharpness, exposure, and overlap before submission. S2M already computes a Laplacian-based sharpness score per sampled frame.</span></div></div>
+        <div class="recon-stage"><span class="stage-num">02</span><div class="stage-body"><strong>Feature extraction and matching</strong><span>SIFT or similar features are detected and matched across image pairs to find corresponding points.</span></div></div>
+        <div class="recon-stage"><span class="stage-num">03</span><div class="stage-body"><strong>Structure from Motion</strong><span>Estimate camera positions and orientations from matched features. Produces a sparse point cloud.</span></div></div>
+        <div class="recon-stage"><span class="stage-num">04</span><div class="stage-body"><strong>Dense reconstruction</strong><span>Build a dense point cloud or multi-view depth map from aligned cameras.</span></div></div>
+        <div class="recon-stage"><span class="stage-num">05</span><div class="stage-body"><strong>Mesh and texture</strong><span>Reconstruct a surface mesh, generate UV maps, and project textures from the original images.</span></div></div>
+        <div class="recon-stage"><span class="stage-num">06</span><div class="stage-body"><strong>Export</strong><span>Deliver a GLB, OBJ, or PLY file ready for the 3D viewer above.</span></div></div>
+      </div>
+      <div class="recon-note">
+        S2M does not invent geometry. Until a backend is connected, no reconstruction is performed and no fake model is generated. See the deployment notes below this code for the recommended COLMAP-based backend architecture.
+      </div>
+    </div>
+  </section>
 
   <div class="footer">
-    <div><strong>S2M</strong><br>Scan to Model</div>
-    <div style="text-align:right">Local browser workspace<br>Dark interface · Automatic capture</div>
+    <div><strong>S2M</strong><br>Scan to Model · Local browser workspace</div>
+    <div style="text-align:right">IndexedDB storage · Three.js viewer<br>Dark interface · HTTPS required for camera</div>
   </div>
 </main>
 
-<canvas id="frameCanvas" hidden></canvas>
+<div id="projectModal" class="modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="modalTitle">Project</h3>
+      <button class="modal-close" id="modalClose">Close</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
 
-<script>
+<canvas id="processCanvas" hidden></canvas>
+<canvas id="captureCanvas" hidden></canvas>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
 (() => {
   "use strict";
 
   const $ = id => document.getElementById(id);
   const liveVideo = $("liveVideo");
-  const canvas = $("frameCanvas");
-  const ctx = canvas.getContext("2d", { alpha: false });
+  const edgeCanvas = $("edgeOverlay");
+  const edgeCtx = edgeCanvas.getContext("2d");
+  const processCanvas = $("processCanvas");
+  const processCtx = processCanvas.getContext("2d", { willReadFrequently: true });
+  const captureCanvas = $("captureCanvas");
+  const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
 
-  let stream = null;
-  let recorder = null;
-  let chunks = [];
-  let sampleTimer = null;
-  let clockTimer = null;
-  let scanStartedAt = 0;
-  let elapsedBeforeStop = 0;
-  let scanFrames = [];
-  let projects = [];
-  let projectId = 1;
-  let scanActive = false;
-  let busy = false;
-  let lastSavedScan = false;
-  let notificationTimer = null;
+  const state = {
+    stream: null,
+    recorder: null,
+    chunks: [],
+    sampleTimer: null,
+    clockTimer: null,
+    edgeRaf: null,
+    lastEdgeTime: 0,
+    scanStartedAt: 0,
+    elapsedBeforeStop: 0,
+    scanFrames: [],
+    scanType: "video",
+    scanActive: false,
+    busy: false,
+    projects: [],
+    nextId: 1,
+    notificationTimer: null,
+    settings: {
+      edgeOverlay: true,
+      centerGuide: true,
+      autoSample: true
+    },
+    objectUrls: []
+  };
 
+  // ===== IndexedDB =====
+  const DB_NAME = "s2m";
+  const DB_VERSION = 1;
+  const STORE = "projects";
+  let db = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("IndexedDB is not supported by this browser."));
+        return;
+      }
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = e => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains(STORE)) {
+          d.createObjectStore(STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function dbPut(project) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(project);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  function dbAll() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function dbDelete(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  function dbClear() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // ===== Settings persistence =====
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem("s2m-settings") || "{}");
+      Object.assign(state.settings, s);
+    } catch (_) {}
+    $("toggleEdge").classList.toggle("on", state.settings.edgeOverlay);
+    $("toggleEdge").setAttribute("aria-checked", state.settings.edgeOverlay);
+    $("toggleGuide").classList.toggle("on", state.settings.centerGuide);
+    $("toggleGuide").setAttribute("aria-checked", state.settings.centerGuide);
+    $("toggleSample").classList.toggle("on", state.settings.autoSample);
+    $("toggleSample").setAttribute("aria-checked", state.settings.autoSample);
+    $("centerGuide").classList.toggle("show", state.settings.centerGuide);
+  }
+  function saveSettings() {
+    try { localStorage.setItem("s2m-settings", JSON.stringify(state.settings)); } catch (_) {}
+  }
+
+  // ===== Notifications =====
   function notify(text, type = "good") {
     const el = $("notice");
     el.textContent = text;
     el.className = "notice show " + type;
-    clearTimeout(notificationTimer);
-    notificationTimer = setTimeout(() => el.classList.remove("show"), 6500);
+    clearTimeout(state.notificationTimer);
+    state.notificationTimer = setTimeout(() => el.classList.remove("show"), 6500);
   }
-
   function fmtTime(seconds) {
     seconds = Math.max(0, Math.floor(seconds));
-    return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" +
-      String(seconds % 60).padStart(2, "0");
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
-
   function currentDuration() {
-    return scanActive
-      ? elapsedBeforeStop + (Date.now() - scanStartedAt) / 1000
-      : elapsedBeforeStop;
+    return state.scanActive
+      ? state.elapsedBeforeStop + (Date.now() - state.scanStartedAt) / 1000
+      : state.elapsedBeforeStop;
+  }
+  function safeName(name) {
+    return (name || "scan").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "scan";
   }
 
+  // ===== UI updates =====
   function updateStats() {
-    $("projectCount").textContent = projects.length;
-    $("totalFrames").textContent = projects.reduce((n, p) => n + p.frames.length, 0)
-      + scanFrames.length;
-    $("workspaceStatus").textContent = scanActive ? "SCANNING" : (stream ? "ONLINE" : "READY");
-    $("cameraCounter").textContent = scanFrames.length + " frames";
-    $("clearProjects").disabled = projects.length === 0;
+    const totalFrames = state.projects.reduce((n, p) => n + p.frames.length, 0) + state.scanFrames.length;
+    $("statProjects").textContent = state.projects.length;
+    $("statFrames").textContent = totalFrames;
+    const last = state.projects[0];
+    $("statDuration").textContent = last ? fmtTime(last.duration) : "00:00";
+    $("statStatus").textContent = state.scanActive ? "SCANNING" : (state.stream ? "ONLINE" : "READY");
+    $("cameraCounter").textContent = state.scanFrames.length + " frames";
+    $("clearProjects").disabled = state.projects.length === 0;
+    $("exportIndex").disabled = state.projects.length === 0;
+    $("cameraPill").textContent = state.stream ? "CAMERA ON" : "CAMERA OFF";
+    $("cameraPill").classList.toggle("on", !!state.stream);
   }
-
   function updateCameraUI() {
-    const active = !!stream;
+    const active = !!state.stream;
     $("camera").classList.toggle("active", active);
-    $("cameraState").textContent = scanActive ? "Recording" : (active ? "Camera ready" : "Camera offline");
-    $("liveStatus").textContent = scanActive ? "Recording · Auto capture active" : (active ? "Camera ready" : "No active camera");
-    $("liveStatus").classList.toggle("on", scanActive || active);
-    $("recIndicator").classList.toggle("active", scanActive);
-    $("startCamera").disabled = active || busy;
-    $("stopCamera").disabled = !active || scanActive || busy;
-    $("startScan").disabled = !active || scanActive || busy;
-    $("stopScan").disabled = !scanActive || busy;
+    $("cameraState").textContent = state.scanActive ? "Recording" : (active ? "Camera ready" : "Camera offline");
+    $("liveStatus").textContent = state.scanActive ? "Recording · Auto capture active" : (active ? "Camera ready" : "No active camera");
+    $("liveStatus").classList.toggle("on", state.scanActive || active);
+    $("recIndicator").classList.toggle("active", state.scanActive);
+    $("startCamera").disabled = active || state.busy;
+    $("stopCamera").disabled = !active || state.scanActive || state.busy;
+    $("startScan").disabled = !active || state.scanActive || state.busy;
+    $("captureStill").disabled = !active || state.busy;
+    $("stopScan").disabled = !state.scanActive || state.busy;
     $("timer").textContent = fmtTime(currentDuration());
     updateStats();
   }
 
+  // ===== Camera =====
   async function refreshCameras() {
     if (!navigator.mediaDevices?.enumerateDevices) return;
     try {
@@ -554,60 +1103,176 @@ select {
       if (cameras.some(d => d.deviceId === previous)) select.value = previous;
     } catch (_) {}
   }
-
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      notify("Camera access requires HTTPS. Open your deployed Vercel URL or use localhost.", "bad");
+      notify("Camera access requires HTTPS or localhost. Open your Vercel deployment URL or use localhost.", "bad");
       return;
     }
-    if (busy || scanActive) return;
-    busy = true;
+    if (state.busy || state.scanActive) return;
+    state.busy = true;
     updateCameraUI();
     try {
       await stopCameraTracks();
       const deviceId = $("cameraSelect").value;
       const height = Number($("quality").value);
       const videoConstraints = {
-        width: { ideal: height === 1080 ? 1920 : 1280 },
+        width: { ideal: height === 1080 ? 1920 : (height === 720 ? 1280 : 640) },
         height: { ideal: height },
         ...(deviceId
           ? { deviceId: { exact: deviceId } }
           : { facingMode: { ideal: "environment" } })
       };
-      stream = await navigator.mediaDevices.getUserMedia({
+      state.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: videoConstraints
       });
-      liveVideo.srcObject = stream;
+      liveVideo.srcObject = state.stream;
       await new Promise((resolve, reject) => {
-        if (liveVideo.readyState >= 1 && liveVideo.videoWidth) return resolve();
+        if (liveVideo.readyState >= 2 && liveVideo.videoWidth) return resolve();
         liveVideo.onloadedmetadata = resolve;
         liveVideo.onerror = () => reject(new Error("The camera preview could not load."));
       });
-      await liveVideo.play();
+      await liveVideo.play().catch(() => {});
       await refreshCameras();
-      notify("Camera ready. Start a scan when your object is in view.");
+      notify("Camera ready. Start a scan or capture a still when your object is in view.");
+      startEdgeLoop();
     } catch (err) {
       await stopCameraTracks();
       const explanations = {
         NotAllowedError: "Camera permission was denied. Allow camera access in your browser settings.",
-        NotFoundError: "No compatible camera was found.",
+        NotFoundError: "No compatible camera was found on this device.",
         NotReadableError: "The camera may be in use by another app. Close that app and retry.",
         OverconstrainedError: "The selected camera or resolution is unavailable. Try another setting."
       };
       notify(explanations[err.name] || ("Could not start the camera: " + err.message), "bad");
     } finally {
-      busy = false;
+      state.busy = false;
       updateCameraUI();
     }
   }
-
   async function stopCameraTracks() {
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    stream = null;
+    if (state.stream) state.stream.getTracks().forEach(track => track.stop());
+    state.stream = null;
     liveVideo.srcObject = null;
   }
+  async function stopAll() {
+    if (state.scanActive) await stopScan();
+    stopEdgeLoop();
+    await stopCameraTracks();
+    updateCameraUI();
+  }
 
+  // ===== Edge detection (Sobel) =====
+  function startEdgeLoop() {
+    if (state.edgeRaf) return;
+    const loop = () => {
+      state.edgeRaf = requestAnimationFrame(loop);
+      if (!state.stream || !state.settings.edgeOverlay) {
+        edgeCtx.clearRect(0, 0, edgeCanvas.width, edgeCanvas.height);
+        return;
+      }
+      const now = performance.now();
+      if (now - state.lastEdgeTime < 50) return; // throttle ~20fps
+      state.lastEdgeTime = now;
+      processEdgeFrame();
+    };
+    state.edgeRaf = requestAnimationFrame(loop);
+  }
+  function stopEdgeLoop() {
+    if (state.edgeRaf) cancelAnimationFrame(state.edgeRaf);
+    state.edgeRaf = null;
+    edgeCtx.clearRect(0, 0, edgeCanvas.width, edgeCanvas.height);
+  }
+  function processEdgeFrame() {
+    const vw = liveVideo.videoWidth;
+    const vh = liveVideo.videoHeight;
+    if (!vw || !vh) return;
+    const cameraEl = $("camera");
+    const rect = cameraEl.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    // Compute cover-crop source rectangle (object-fit: cover)
+    const containerAspect = rect.width / rect.height;
+    const videoAspect = vw / vh;
+    let sx, sy, sw, sh;
+    if (videoAspect > containerAspect) {
+      sh = vh;
+      sw = Math.max(1, vh * containerAspect);
+      sx = (vw - sw) / 2;
+      sy = 0;
+    } else {
+      sw = vw;
+      sh = Math.max(1, vw / containerAspect);
+      sx = 0;
+      sy = (vh - sh) / 2;
+    }
+
+    // Downsample for performance
+    const procW = 160;
+    const procH = Math.max(1, Math.round(procW * rect.height / rect.width));
+    processCanvas.width = procW;
+    processCanvas.height = procH;
+    processCtx.drawImage(liveVideo, sx, sy, sw, sh, 0, 0, procW, procH);
+
+    let imageData;
+    try {
+      imageData = processCtx.getImageData(0, 0, procW, procH);
+    } catch (e) {
+      return;
+    }
+    const data = imageData.data;
+    const gray = new Uint8ClampedArray(procW * procH);
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      gray[j] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+    }
+
+    // Sobel operator
+    const edges = new Uint8ClampedArray(procW * procH);
+    const threshold = 60;
+    for (let y = 1; y < procH - 1; y++) {
+      for (let x = 1; x < procW - 1; x++) {
+        const i = y * procW + x;
+        const tl = gray[i - procW - 1];
+        const tc = gray[i - procW];
+        const tr = gray[i - procW + 1];
+        const ml = gray[i - 1];
+        const mr = gray[i + 1];
+        const bl = gray[i + procW - 1];
+        const bc = gray[i + procW];
+        const br = gray[i + procW + 1];
+        const gx = -tl + tr - 2*ml + 2*mr - bl + br;
+        const gy = -tl - 2*tc - tr + bl + 2*bc + br;
+        const mag = Math.sqrt(gx*gx + gy*gy);
+        edges[i] = mag > threshold ? Math.min(255, mag) : 0;
+      }
+    }
+
+    // Draw green edges on overlay, scaled to container
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    edgeCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+    edgeCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+    edgeCanvas.style.width = rect.width + "px";
+    edgeCanvas.style.height = rect.height + "px";
+    edgeCtx.clearRect(0, 0, edgeCanvas.width, edgeCanvas.height);
+
+    const scaleX = edgeCanvas.width / procW;
+    const scaleY = edgeCanvas.height / procH;
+    const dotSize = Math.max(scaleX, scaleY);
+    edgeCtx.fillStyle = "#a3e635";
+    for (let y = 0; y < procH; y++) {
+      for (let x = 0; x < procW; x++) {
+        const i = y * procW + x;
+        const mag = edges[i];
+        if (mag > 0) {
+          edgeCtx.globalAlpha = Math.min(0.85, mag / 220);
+          edgeCtx.fillRect(x * scaleX, y * scaleY, dotSize, dotSize);
+        }
+      }
+    }
+    edgeCtx.globalAlpha = 1;
+  }
+
+  // ===== Recorder =====
   function pickRecorderType() {
     if (!window.MediaRecorder) return "";
     const candidates = [
@@ -617,153 +1282,484 @@ select {
     ];
     return candidates.find(t => MediaRecorder.isTypeSupported(t)) || "";
   }
+  function getVideoBitrate() {
+    const q = $("videoQuality").value;
+    if (q === "high") return 5_000_000;
+    if (q === "small") return 1_000_000;
+    return 2_500_000;
+  }
 
+  // ===== Frame sampling =====
   async function captureSample() {
-    if (!scanActive || !liveVideo.videoWidth || !liveVideo.videoHeight) return;
+    if (!state.scanActive || !liveVideo.videoWidth || !liveVideo.videoHeight) return;
     try {
-      canvas.width = liveVideo.videoWidth;
-      canvas.height = liveVideo.videoHeight;
-      ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+      captureCanvas.width = liveVideo.videoWidth;
+      captureCanvas.height = liveVideo.videoHeight;
+      captureCtx.drawImage(liveVideo, 0, 0, captureCanvas.width, captureCanvas.height);
       const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(b => b ? resolve(b) : reject(new Error("Image encoding failed")), "image/jpeg", 0.88);
+        captureCanvas.toBlob(b => b ? resolve(b) : reject(new Error("Image encoding failed")), "image/jpeg", 0.85);
       });
-      if (!scanActive) return;
-      scanFrames.push({
-        id: scanFrames.length + 1,
+      if (!state.scanActive) return;
+      const sharpness = computeSharpness(captureCanvas.width, captureCanvas.height);
+      state.scanFrames.push({
+        id: state.scanFrames.length + 1,
         blob,
-        width: canvas.width,
-        height: canvas.height,
-        time: currentDuration()
+        width: captureCanvas.width,
+        height: captureCanvas.height,
+        time: currentDuration(),
+        sharpness
       });
-      $("cameraCounter").textContent = scanFrames.length + " frames";
-      $("totalFrames").textContent = projects.reduce((n, p) => n + p.frames.length, 0) + scanFrames.length;
+      $("cameraCounter").textContent = state.scanFrames.length + " frames";
+      updateStats();
     } catch (err) {
       console.error("Frame sampling failed:", err);
     }
   }
 
+  // ===== Sharpness heuristic (Laplacian variance) =====
+  function computeSharpness(w, h) {
+    const tw = 64, th = Math.max(1, Math.round(tw * h / w));
+    const tmp = document.createElement("canvas");
+    tmp.width = tw; tmp.height = th;
+    const tctx = tmp.getContext("2d", { willReadFrequently: true });
+    tctx.drawImage(captureCanvas, 0, 0, w, h, 0, 0, tw, th);
+    let imageData;
+    try {
+      imageData = tctx.getImageData(0, 0, tw, th);
+    } catch (e) {
+      return 0;
+    }
+    const data = imageData.data;
+    const gray = new Float32Array(tw * th);
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      gray[j] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+    let sum = 0, sumSq = 0, count = 0;
+    for (let y = 1; y < th - 1; y++) {
+      for (let x = 1; x < tw - 1; x++) {
+        const i = y * tw + x;
+        const lap = -4 * gray[i] + gray[i-1] + gray[i+1] + gray[i-tw] + gray[i+tw];
+        sum += lap;
+        sumSq += lap * lap;
+        count++;
+      }
+    }
+    if (count === 0) return 0;
+    const mean = sum / count;
+    const variance = (sumSq / count) - mean * mean;
+    return Math.round(variance);
+  }
+
+  // ===== Clock =====
   function startClock() {
-    clearInterval(clockTimer);
-    clockTimer = setInterval(() => {
+    clearInterval(state.clockTimer);
+    state.clockTimer = setInterval(() => {
       $("timer").textContent = fmtTime(currentDuration());
     }, 250);
   }
-
   function stopClock() {
-    clearInterval(clockTimer);
-    clockTimer = null;
+    clearInterval(state.clockTimer);
+    state.clockTimer = null;
   }
 
+  // ===== Scan lifecycle =====
   async function startScan() {
-    if (!stream || scanActive || busy) return;
+    if (!state.stream || state.scanActive || state.busy) return;
     if (!window.MediaRecorder) {
-      notify("This browser does not support video recording. Try the latest version of Chrome.", "bad");
+      notify("This browser does not support video recording. Use 'Capture still' for a still-only scan.", "bad");
       return;
     }
-
-    busy = true;
+    state.busy = true;
     updateCameraUI();
-    chunks = [];
-    scanFrames = [];
-    elapsedBeforeStop = 0;
-    lastSavedScan = false;
-
+    state.chunks = [];
+    state.scanFrames = [];
+    state.elapsedBeforeStop = 0;
+    state.scanType = "video";
     try {
       const type = pickRecorderType();
-      recorder = type
-        ? new MediaRecorder(stream, { mimeType: type })
-        : new MediaRecorder(stream);
+      const bitrate = getVideoBitrate();
+      state.recorder = type
+        ? new MediaRecorder(state.stream, { mimeType: type, videoBitsPerSecond: bitrate })
+        : new MediaRecorder(state.stream, { videoBitsPerSecond: bitrate });
 
-      recorder.addEventListener("dataavailable", event => {
-        if (event.data && event.data.size) chunks.push(event.data);
+      state.recorder.addEventListener("dataavailable", event => {
+        if (event.data && event.data.size) state.chunks.push(event.data);
       });
-
-      recorder.addEventListener("error", event => {
+      state.recorder.addEventListener("error", event => {
         notify("The recording encountered an error. Stop the scan and try again.", "bad");
         console.error("MediaRecorder error:", event.error || event);
       });
-
-      recorder.start(1000);
-      scanActive = true;
-      scanStartedAt = Date.now();
-      await captureSample();
-      sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+      state.recorder.start(1000);
+      state.scanActive = true;
+      state.scanStartedAt = Date.now();
+      if (state.settings.autoSample) {
+        await captureSample();
+        state.sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+      }
       startClock();
-      notify("Recording started. S2M is recording video and automatically capturing frames.", "good");
+      notify("Recording started. Video and automatic frame capture are active.", "good");
     } catch (err) {
-      scanActive = false;
-      recorder = null;
+      state.scanActive = false;
+      state.recorder = null;
       notify("Could not start recording: " + err.message, "bad");
     } finally {
-      busy = false;
+      state.busy = false;
       updateCameraUI();
     }
   }
 
   async function stopScan() {
-    if (!scanActive || busy) return;
-    busy = true;
+    if (!state.scanActive || state.busy) return;
+    state.busy = true;
     updateCameraUI();
-    clearInterval(sampleTimer);
-    sampleTimer = null;
-    elapsedBeforeStop = currentDuration();
-    scanActive = false;
+    clearInterval(state.sampleTimer);
+    state.sampleTimer = null;
+    state.elapsedBeforeStop = currentDuration();
+    state.scanActive = false;
     stopClock();
-
     try {
-      const activeRecorder = recorder;
+      const activeRecorder = state.recorder;
       if (activeRecorder && activeRecorder.state !== "inactive") {
         await new Promise(resolve => {
           activeRecorder.addEventListener("stop", resolve, { once: true });
           activeRecorder.stop();
         });
       }
-
-      // Allow any final image sample to finish before saving the project.
       await new Promise(resolve => setTimeout(resolve, 100));
-
       const type = activeRecorder?.mimeType || "video/webm";
-      const videoBlob = new Blob(chunks, { type });
-      if (!videoBlob.size && scanFrames.length === 0) {
+      const videoBlob = new Blob(state.chunks, { type });
+      if (!videoBlob.size && state.scanFrames.length === 0) {
         notify("This scan did not produce any usable video or frames.", "bad");
         return;
       }
-
-      const id = projectId++;
+      const id = state.nextId++;
+      const customName = $("projectName").value.trim();
       const project = {
         id,
-        name: "Scan " + String(id).padStart(3, "0"),
-        createdAt: new Date(),
-        duration: elapsedBeforeStop,
+        name: customName || ("Scan " + String(id).padStart(3, "0")),
+        createdAt: Date.now(),
+        duration: state.elapsedBeforeStop,
+        scanType: state.scanType,
         videoBlob: videoBlob.size ? videoBlob : null,
         videoType: type,
-        videoUrl: videoBlob.size ? URL.createObjectURL(videoBlob) : null,
-        frames: scanFrames.slice(),
+        frames: state.scanFrames.slice(),
         width: liveVideo.videoWidth,
         height: liveVideo.videoHeight
       };
-
-      projects.unshift(project);
-      scanFrames = [];
-      chunks = [];
-      recorder = null;
-      elapsedBeforeStop = 0;
+      try {
+        await dbPut(project);
+      } catch (e) {
+        notify("Could not save project to local storage: " + e.message, "bad");
+        return;
+      }
+      state.projects.unshift(project);
+      state.scanFrames = [];
+      state.chunks = [];
+      state.recorder = null;
+      state.elapsedBeforeStop = 0;
+      $("projectName").value = "";
       renderProjects();
       updateCameraUI();
-
       if (project.videoBlob) {
-        notify("Scan saved as " + project.name + ". Your video and " + project.frames.length + " sampled frames are grouped into one project.", "good");
+        notify("Scan saved as " + project.name + ". Video and " + project.frames.length + " sampled frames stored locally.", "good");
       } else {
-        notify("No video was recorded, but the sampled frames were saved to the project for this session.", "bad");
+        notify("Frames saved to project. No video was recorded for this scan.", "bad");
       }
     } catch (err) {
       notify("Could not finish saving the scan: " + err.message, "bad");
     } finally {
-      busy = false;
+      state.busy = false;
       updateCameraUI();
     }
   }
 
+  async function captureStill() {
+    if (!state.stream || state.busy) return;
+    state.busy = true;
+    updateCameraUI();
+    try {
+      captureCanvas.width = liveVideo.videoWidth;
+      captureCanvas.height = liveVideo.videoHeight;
+      captureCtx.drawImage(liveVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+      const blob = await new Promise((resolve, reject) => {
+        captureCanvas.toBlob(b => b ? resolve(b) : reject(new Error("Image encoding failed")), "image/jpeg", 0.9);
+      });
+      const sharpness = computeSharpness(captureCanvas.width, captureCanvas.height);
+      const id = state.nextId++;
+      const customName = $("projectName").value.trim();
+      const project = {
+        id,
+        name: customName || ("Still " + String(id).padStart(3, "0")),
+        createdAt: Date.now(),
+        duration: 0,
+        scanType: "still",
+        videoBlob: null,
+        videoType: "",
+        frames: [{
+          id: 1,
+          blob,
+          width: captureCanvas.width,
+          height: captureCanvas.height,
+          time: 0,
+          sharpness
+        }],
+        width: captureCanvas.width,
+        height: captureCanvas.height
+      };
+      try {
+        await dbPut(project);
+      } catch (e) {
+        notify("Could not save still capture: " + e.message, "bad");
+        return;
+      }
+      state.projects.unshift(project);
+      $("projectName").value = "";
+      renderProjects();
+      updateCameraUI();
+      notify("Still capture saved as " + project.name + ".", "good");
+    } catch (err) {
+      notify("Could not capture still: " + err.message, "bad");
+    } finally {
+      state.busy = false;
+      updateCameraUI();
+    }
+  }
+
+  // ===== Project rendering =====
+  function revokeObjectUrls() {
+    state.objectUrls.forEach(url => URL.revokeObjectURL(url));
+    state.objectUrls = [];
+  }
+  function makeObjectUrl(blob) {
+    const url = URL.createObjectURL(blob);
+    state.objectUrls.push(url);
+    return url;
+  }
+  function renderProjects() {
+    revokeObjectUrls();
+    const container = $("projects");
+    container.replaceChildren();
+    $("emptyState").style.display = state.projects.length ? "none" : "block";
+    state.projects.forEach(project => {
+      const card = document.createElement("article");
+      card.className = "project-card";
+
+      const thumb = document.createElement("div");
+      thumb.className = "project-thumb";
+      thumb.addEventListener("click", () => openProjectDetail(project));
+      if (project.videoBlob) {
+        const v = document.createElement("video");
+        v.src = makeObjectUrl(project.videoBlob);
+        v.muted = true;
+        v.preload = "metadata";
+        v.playsInline = true;
+        thumb.appendChild(v);
+      } else if (project.frames.length) {
+        const img = document.createElement("img");
+        img.src = makeObjectUrl(project.frames[0].blob);
+        img.alt = project.name;
+        thumb.appendChild(img);
+      } else {
+        const ph = document.createElement("div");
+        ph.className = "placeholder";
+        ph.textContent = "No preview";
+        thumb.appendChild(ph);
+      }
+      const tag = document.createElement("span");
+      tag.className = "project-tag" + (project.scanType === "still" ? " still" : "");
+      tag.textContent = project.scanType === "still" ? "STILL" : "SCAN";
+      thumb.appendChild(tag);
+
+      const info = document.createElement("div");
+      info.className = "project-info";
+      const name = document.createElement("div");
+      name.className = "project-name";
+      name.textContent = project.name;
+      const meta = document.createElement("div");
+      meta.className = "project-meta";
+      const date = new Date(project.createdAt);
+      meta.textContent = fmtTime(project.duration) + " · " + project.frames.length + " frames · " +
+        project.width + "×" + project.height + " · " + date.toLocaleString();
+      const actions = document.createElement("div");
+      actions.className = "project-actions";
+      const open = document.createElement("button");
+      open.textContent = "Open";
+      open.addEventListener("click", () => openProjectDetail(project));
+      actions.appendChild(open);
+      if (project.videoBlob) {
+        const dl = document.createElement("button");
+        dl.textContent = "Video";
+        dl.addEventListener("click", () => {
+          const ext = project.videoType.includes("mp4") ? "mp4" : "webm";
+          downloadBlob(project.videoBlob, safeName(project.name) + "." + ext);
+        });
+        actions.appendChild(dl);
+      }
+      const dlFrames = document.createElement("button");
+      dlFrames.textContent = "Frames ZIP";
+      dlFrames.disabled = project.frames.length === 0;
+      dlFrames.addEventListener("click", () => exportFramesZip(project));
+      actions.appendChild(dlFrames);
+      const del = document.createElement("button");
+      del.className = "danger";
+      del.textContent = "Delete";
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete " + project.name + " and its locally stored video and frames?")) return;
+        try {
+          await dbDelete(project.id);
+        } catch (e) {
+          notify("Could not delete project: " + e.message, "bad");
+          return;
+        }
+        state.projects = state.projects.filter(p => p.id !== project.id);
+        renderProjects();
+        updateStats();
+        notify("Project " + project.name + " deleted.");
+      });
+      actions.appendChild(del);
+      info.append(name, meta, actions);
+      card.append(thumb, info);
+      container.appendChild(card);
+    });
+    updateStats();
+  }
+
+  // ===== Project detail modal =====
+  let modalFrameUrls = [];
+  function openProjectDetail(project) {
+    modalFrameUrls.forEach(u => URL.revokeObjectURL(u));
+    modalFrameUrls = [];
+    $("modalTitle").textContent = project.name;
+    const body = $("modalBody");
+    body.replaceChildren();
+
+    if (project.videoBlob) {
+      const sec = document.createElement("div");
+      sec.className = "modal-section";
+      const h = document.createElement("h4");
+      h.textContent = "RECORDING";
+      const v = document.createElement("video");
+      const url = URL.createObjectURL(project.videoBlob);
+      modalFrameUrls.push(url);
+      v.src = url;
+      v.controls = true;
+      v.playsInline = true;
+      v.style.width = "100%";
+      v.style.borderRadius = "8px";
+      v.style.background = "#000";
+      sec.append(h, v);
+      body.appendChild(sec);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "modal-section";
+    const metaH = document.createElement("h4");
+    metaH.textContent = "METADATA";
+    const list = document.createElement("div");
+    list.className = "meta-list";
+    const rows = [
+      ["Type", project.scanType === "still" ? "Still capture" : "Video scan"],
+      ["Created", new Date(project.createdAt).toLocaleString()],
+      ["Duration", fmtTime(project.duration)],
+      ["Frames", String(project.frames.length)],
+      ["Resolution", project.width + " × " + project.height + " px"],
+      ["Video file", project.videoBlob ? (project.videoType + ", " + (project.videoBlob.size / 1024 / 1024).toFixed(2) + " MB") : "None"],
+      ["Frames size", (project.frames.reduce((n, f) => n + f.blob.size, 0) / 1024 / 1024).toFixed(2) + " MB"],
+      ["Avg sharpness", project.frames.length ? Math.round(project.frames.reduce((n, f) => n + (f.sharpness || 0), 0) / project.frames.length).toString() : "n/a"]
+    ];
+    rows.forEach(([k, val]) => {
+      const row = document.createElement("div");
+      const kEl = document.createElement("span");
+      kEl.textContent = k;
+      const vEl = document.createElement("span");
+      vEl.textContent = val;
+      row.append(kEl, vEl);
+      list.appendChild(row);
+    });
+    meta.append(metaH, list);
+    body.appendChild(meta);
+
+    if (project.frames.length) {
+      const frames = document.createElement("div");
+      frames.className = "modal-section";
+      const fh = document.createElement("h4");
+      fh.textContent = "SAMPLED FRAMES (" + project.frames.length + ")";
+      const grid = document.createElement("div");
+      grid.className = "frame-grid";
+      project.frames.forEach(frame => {
+        const tile = document.createElement("div");
+        tile.className = "frame-thumb";
+        const img = document.createElement("img");
+        const url = URL.createObjectURL(frame.blob);
+        modalFrameUrls.push(url);
+        img.src = url;
+        img.alt = "Frame " + frame.id;
+        const num = document.createElement("span");
+        num.className = "frame-num";
+        num.textContent = "#" + String(frame.id).padStart(3, "0");
+        const time = document.createElement("span");
+        time.className = "frame-time";
+        time.textContent = fmtTime(frame.time);
+        if (frame.sharpness) {
+          const sh = document.createElement("span");
+          sh.className = "sharpness";
+          sh.textContent = "S" + frame.sharpness;
+          tile.append(img, num, time, sh);
+        } else {
+          tile.append(img, num, time);
+        }
+        grid.appendChild(tile);
+      });
+      frames.append(fh, grid);
+      body.appendChild(frames);
+    }
+
+    const ex = document.createElement("div");
+    ex.className = "modal-section";
+    const eh = document.createElement("h4");
+    eh.textContent = "EXPORT";
+    const btns = document.createElement("div");
+    btns.style.display = "flex";
+    btns.style.flexWrap = "wrap";
+    btns.style.gap = "8px";
+    if (project.videoBlob) {
+      const b = document.createElement("button");
+      b.textContent = "Download video";
+      b.addEventListener("click", () => {
+        const ext = project.videoType.includes("mp4") ? "mp4" : "webm";
+        downloadBlob(project.videoBlob, safeName(project.name) + "." + ext);
+      });
+      btns.appendChild(b);
+    }
+    if (project.frames.length) {
+      const b = document.createElement("button");
+      b.textContent = "Download all frames (ZIP)";
+      b.addEventListener("click", () => exportFramesZip(project));
+      btns.appendChild(b);
+      const b2 = document.createElement("button");
+      b2.textContent = "Download frames individually";
+      b2.addEventListener("click", async () => {
+        notify("Downloading " + project.frames.length + " frames individually.");
+        for (const frame of project.frames) {
+          downloadBlob(frame.blob, safeName(project.name) + "-frame-" + String(frame.id).padStart(3, "0") + ".jpg");
+          await new Promise(r => setTimeout(r, 250));
+        }
+        notify("Frame download requests sent.", "good");
+      });
+      btns.appendChild(b2);
+    }
+    ex.append(eh, btns);
+    body.appendChild(ex);
+
+    $("projectModal").classList.add("show");
+  }
+  function closeProjectModal() {
+    modalFrameUrls.forEach(u => URL.revokeObjectURL(u));
+    modalFrameUrls = [];
+    $("projectModal").classList.remove("show");
+  }
+
+  // ===== Export helpers =====
   function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -774,158 +1770,416 @@ select {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
-
-  function renderProjects() {
-    const container = $("projects");
-    container.replaceChildren();
-    $("empty").style.display = projects.length ? "none" : "block";
-
-    projects.forEach(project => {
-      const card = document.createElement("article");
-      card.className = "project";
-
-      const videoBox = document.createElement("div");
-      videoBox.className = "project-video";
-      if (project.videoUrl) {
-        const video = document.createElement("video");
-        video.src = project.videoUrl;
-        video.controls = true;
-        video.playsInline = true;
-        video.preload = "metadata";
-        video.setAttribute("aria-label", project.name + " recording");
-        videoBox.appendChild(video);
-      } else {
-        const emptyVideo = document.createElement("div");
-        emptyVideo.className = "no-video";
-        emptyVideo.textContent = "No playable video available";
-        videoBox.appendChild(emptyVideo);
+  async function exportFramesZip(project) {
+    if (!project.frames.length) return;
+    if (typeof JSZip === "undefined") {
+      notify("ZIP library not loaded. Downloading frames individually instead.", "bad");
+      for (const frame of project.frames) {
+        downloadBlob(frame.blob, safeName(project.name) + "-frame-" + String(frame.id).padStart(3, "0") + ".jpg");
+        await new Promise(r => setTimeout(r, 250));
       }
-
-      const info = document.createElement("div");
-      info.className = "project-info";
-
-      const titleRow = document.createElement("div");
-      titleRow.className = "project-title-row";
-      const title = document.createElement("strong");
-      title.textContent = project.name;
-      const tag = document.createElement("span");
-      tag.className = "project-tag";
-      tag.textContent = "SCAN";
-      titleRow.append(title, tag);
-
-      const meta = document.createElement("div");
-      meta.className = "project-meta";
-      meta.textContent = fmtTime(project.duration) + " · " +
-        project.frames.length + " sampled frames · " +
-        project.width + " × " + project.height + " px · " +
-        project.createdAt.toLocaleString();
-
-      const actions = document.createElement("div");
-      actions.className = "project-actions";
-
-      if (project.videoBlob) {
-        const downloadVideo = document.createElement("button");
-        downloadVideo.textContent = "Download video";
-        downloadVideo.addEventListener("click", () => {
-          const ext = project.videoType.includes("mp4") ? "mp4" : "webm";
-          downloadBlob(project.videoBlob, project.name.toLowerCase().replace(/\s+/g, "-") + "." + ext);
-        });
-        actions.appendChild(downloadVideo);
+      return;
+    }
+    try {
+      notify("Building ZIP archive...");
+      const zip = new JSZip();
+      const folder = zip.folder(safeName(project.name));
+      project.frames.forEach(frame => {
+        folder.file("frame-" + String(frame.id).padStart(3, "0") + ".jpg", frame.blob);
+      });
+      const manifest = {
+        name: project.name,
+        createdAt: new Date(project.createdAt).toISOString(),
+        duration: project.duration,
+        scanType: project.scanType,
+        width: project.width,
+        height: project.height,
+        videoType: project.videoType || null,
+        frameCount: project.frames.length,
+        frames: project.frames.map(f => ({
+          id: f.id,
+          time: f.time,
+          sharpness: f.sharpness || 0,
+          width: f.width,
+          height: f.height,
+          file: "frame-" + String(f.id).padStart(3, "0") + ".jpg"
+        }))
+      };
+      folder.file("manifest.json", JSON.stringify(manifest, null, 2));
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, safeName(project.name) + "-frames.zip");
+      notify("ZIP archive downloaded.", "good");
+    } catch (e) {
+      notify("ZIP export failed: " + e.message + ". Falling back to individual downloads.", "bad");
+      for (const frame of project.frames) {
+        downloadBlob(frame.blob, safeName(project.name) + "-frame-" + String(frame.id).padStart(3, "0") + ".jpg");
+        await new Promise(r => setTimeout(r, 250));
       }
+    }
+  }
+  async function exportLibraryIndex() {
+    if (!state.projects.length) return;
+    const index = {
+      exportedAt: new Date().toISOString(),
+      application: "S2M — Scan to Model",
+      projectCount: state.projects.length,
+      projects: state.projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        createdAt: new Date(p.createdAt).toISOString(),
+        duration: p.duration,
+        scanType: p.scanType,
+        width: p.width,
+        height: p.height,
+        videoType: p.videoType || null,
+        videoSize: p.videoBlob ? p.videoBlob.size : 0,
+        frameCount: p.frames.length,
+        framesSize: p.frames.reduce((n, f) => n + f.blob.size, 0),
+        frames: p.frames.map(f => ({
+          id: f.id,
+          time: f.time,
+          sharpness: f.sharpness || 0,
+          width: f.width,
+          height: f.height
+        }))
+      }))
+    };
+    const blob = new Blob([JSON.stringify(index, null, 2)], { type: "application/json" });
+    downloadBlob(blob, "s2m-library-index.json");
+    notify("Library index exported as JSON.", "good");
+  }
 
-      const downloadFrames = document.createElement("button");
-      downloadFrames.textContent = "Export frames";
-      downloadFrames.disabled = project.frames.length === 0;
-      downloadFrames.addEventListener("click", async () => {
-        notify("Downloading sampled frames individually. Your browser may ask to allow multiple downloads.");
-        for (const frame of project.frames) {
-          downloadBlob(frame.blob, project.name.toLowerCase().replace(/\s+/g, "-") + "-frame-" + String(frame.id).padStart(3, "0") + ".jpg");
-          await new Promise(resolve => setTimeout(resolve, 250));
+  // ===== 3D Viewer =====
+  let renderer, scene, camera3D, controls, currentModel = null, viewerInit = false;
+  function initViewer() {
+    const canvas = $("viewerCanvas");
+    const wrap = canvas.parentElement;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight, false);
+      renderer.setClearColor(0x050505, 1);
+      scene = new THREE.Scene();
+      camera3D = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.1, 1000);
+      camera3D.position.set(3, 2, 5);
+      controls = new OrbitControls(camera3D, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      const amb = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(amb);
+      const dir1 = new THREE.DirectionalLight(0xffffff, 0.9);
+      dir1.position.set(5, 8, 5);
+      scene.add(dir1);
+      const dir2 = new THREE.DirectionalLight(0xa3e635, 0.3);
+      dir2.position.set(-4, -2, -3);
+      scene.add(dir2);
+      const grid = new THREE.GridHelper(20, 20, 0x333333, 0x222222);
+      grid.material.transparent = true;
+      grid.material.opacity = 0.5;
+      scene.add(grid);
+      viewerInit = true;
+      window.addEventListener("resize", onViewerResize);
+      renderViewer();
+    } catch (e) {
+      console.error("Viewer init failed:", e);
+      $("viewerStatus").textContent = "Viewer unavailable";
+      $("viewerOverlay").classList.add("show");
+      $("viewerOverlay").innerHTML = "<div><strong>3D viewer unavailable</strong>WebGL could not be initialized on this device.</div>";
+    }
+  }
+  function onViewerResize() {
+    if (!viewerInit) return;
+    const wrap = $("viewerCanvas").parentElement;
+    const w = Math.max(1, wrap.clientWidth);
+    const h = Math.max(1, wrap.clientHeight);
+    renderer.setSize(w, h, false);
+    camera3D.aspect = w / h;
+    camera3D.updateProjectionMatrix();
+  }
+  function renderViewer() {
+    if (!viewerInit) return;
+    requestAnimationFrame(renderViewer);
+    controls.update();
+    renderer.render(scene, camera3D);
+  }
+  function fitCameraToObject(model) {
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const fitDist = maxDim / (2 * Math.tan((camera3D.fov * Math.PI / 180) / 2)) * 1.8;
+    camera3D.position.set(center.x + fitDist * 0.6, center.y + fitDimSafe(fitDist) * 0.5, center.z + fitDist);
+    camera3D.lookAt(center);
+    controls.target.copy(center);
+    controls.update();
+  }
+  function fitDimSafe(d) { return isFinite(d) ? d : 1; }
+  function clearCurrentModel() {
+    if (currentModel) {
+      scene.remove(currentModel);
+      currentModel.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+          else o.material.dispose();
         }
-        notify("Frame download requests sent for " + project.name + ".", "good");
       });
-      actions.appendChild(downloadFrames);
-
-      const remove = document.createElement("button");
-      remove.textContent = "Delete";
-      remove.addEventListener("click", () => {
-        if (!confirm("Delete " + project.name + " and its locally held video and frames?")) return;
-        if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
-        projects = projects.filter(p => p.id !== project.id);
-        renderProjects();
-        updateStats();
-      });
-      actions.appendChild(remove);
-
-      info.append(titleRow, meta, actions);
-      card.append(videoBox, info);
-      container.appendChild(card);
-    });
-    updateStats();
+      currentModel = null;
+    }
+    $("viewerOverlay").classList.add("show");
+    $("viewerOverlay").classList.remove("hide");
+    $("viewerStatus").textContent = "No model loaded";
+    $("viewerInfo").textContent = "";
+    $("resetView").disabled = true;
+    $("exportGlb").disabled = true;
+    $("clearModel").disabled = true;
   }
-
-  async function stopAll() {
-    if (scanActive) await stopScan();
-    await stopCameraTracks();
-    updateCameraUI();
-  }
-
-  $("startCamera").addEventListener("click", startCamera);
-  $("stopCamera").addEventListener("click", async () => {
-    await stopAll();
-    notify("Camera stopped. Your saved scan projects remain available in this page.");
-  });
-  $("startScan").addEventListener("click", startScan);
-  $("stopScan").addEventListener("click", stopScan);
-
-  $("cameraSelect").addEventListener("change", async () => {
-    if (scanActive) {
-      notify("Stop the current scan before changing cameras.", "bad");
+  function loadModelFile(file) {
+    if (!viewerInit) {
+      notify("3D viewer is not available on this device.", "bad");
       return;
     }
-    if (stream) await startCamera();
-  });
-
-  $("quality").addEventListener("change", async () => {
-    if (scanActive) {
-      notify("Stop the current scan before changing video quality.", "bad");
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        clearCurrentModel();
+        if (ext === "glb" || ext === "gltf") {
+          const loader = new GLTFLoader();
+          loader.parse(e.target.result, "", gltf => {
+            const model = gltf.scene;
+            scene.add(model);
+            currentModel = model;
+            fitCameraToObject(model);
+            onViewerLoadSuccess(file, model);
+          }, err => {
+            notify("Could not parse GLB/GLTF file: " + (err?.message || "unknown error"), "bad");
+          });
+          return;
+        } else if (ext === "obj") {
+          const loader = new OBJLoader();
+          const text = typeof e.target.result === "string" ? e.target.result : new TextDecoder().decode(e.target.result);
+          const model = loader.parse(text);
+          model.traverse(o => {
+            if (o.isMesh && (!o.material || (Array.isArray(o.material) && o.material.length === 0))) {
+              o.material = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.7, metalness: 0.1 });
+            }
+          });
+          scene.add(model);
+          currentModel = model;
+          fitCameraToObject(model);
+          onViewerLoadSuccess(file, model);
+        } else if (ext === "stl") {
+          const loader = new STLLoader();
+          const geom = loader.parse(e.target.result);
+          geom.computeVertexNormals();
+          const model = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.65, metalness: 0.1 }));
+          scene.add(model);
+          currentModel = model;
+          fitCameraToObject(model);
+          onViewerLoadSuccess(file, model);
+        } else {
+          notify("Unsupported file type: ." + ext + ". Use .glb, .gltf, .obj, or .stl", "bad");
+        }
+      } catch (err) {
+        notify("Could not load model: " + err.message, "bad");
+        console.error(err);
+      }
+    };
+    reader.onerror = () => notify("Could not read file.", "bad");
+    if (ext === "obj") {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  }
+  function onViewerLoadSuccess(file, model) {
+    $("viewerOverlay").classList.add("hide");
+    $("viewerOverlay").classList.remove("show");
+    $("viewerStatus").textContent = file.name;
+    let meshCount = 0, triCount = 0;
+    model.traverse(o => {
+      if (o.isMesh) {
+        meshCount++;
+        if (o.geometry?.index) triCount += o.geometry.index.count / 3;
+        else if (o.geometry?.attributes?.position) triCount += o.geometry.attributes.position.count / 3;
+      }
+    });
+    $("viewerInfo").textContent = meshCount + " mesh · " + Math.round(triCount).toLocaleString() + " tris";
+    $("resetView").disabled = false;
+    $("exportGlb").disabled = false;
+    $("clearModel").disabled = false;
+    notify("Model loaded: " + file.name, "good");
+  }
+  function resetView() {
+    if (!currentModel) {
+      camera3D.position.set(3, 2, 5);
+      controls.target.set(0, 0, 0);
+      controls.update();
       return;
     }
-    if (stream) await startCamera();
-  });
+    fitCameraToObject(currentModel);
+  }
+  function exportGLB() {
+    if (!currentModel) return;
+    const exporter = new GLTFExporter();
+    exporter.parse(
+      currentModel,
+      result => {
+        const blob = new Blob([result], { type: "model/gltf-binary" });
+        downloadBlob(blob, "s2m-export-" + Date.now() + ".glb");
+        notify("GLB exported.", "good");
+      },
+      err => {
+        notify("GLB export failed: " + (err?.message || "unknown error"), "bad");
+        console.error(err);
+      },
+      { binary: true }
+    );
+  }
 
-  $("sampleRate").addEventListener("change", () => {
-    if (!scanActive) return;
-    clearInterval(sampleTimer);
-    sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
-    notify("Automatic frame sampling interval updated.", "good");
-  });
-
-  $("clearProjects").addEventListener("click", () => {
-    if (!projects.length) return;
-    if (!confirm("Delete every saved scan project from this page? Download videos you want to keep first.")) return;
-    projects.forEach(project => {
-      if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
+  // ===== Toggle handlers =====
+  function bindToggle(id, key, onChange) {
+    const el = $(id);
+    const toggle = () => {
+      state.settings[key] = !state.settings[key];
+      el.classList.toggle("on", state.settings[key]);
+      el.setAttribute("aria-checked", state.settings[key]);
+      saveSettings();
+      if (onChange) onChange();
+    };
+    el.addEventListener("click", toggle);
+    el.addEventListener("keydown", e => {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(); }
     });
-    projects = [];
+  }
+
+  // ===== Init =====
+  async function init() {
+    try {
+      db = await openDB();
+      state.projects = await dbAll();
+    } catch (e) {
+      notify("Local storage unavailable: " + e.message + " Projects will not persist after refresh.", "bad");
+    }
+    if (state.projects.length) {
+      state.nextId = Math.max(...state.projects.map(p => p.id)) + 1;
+    }
+    loadSettings();
+    initViewer();
     renderProjects();
-    notify("All scan projects have been cleared.", "good");
-  });
+    updateCameraUI();
 
-  window.addEventListener("pagehide", () => {
-    clearInterval(sampleTimer);
-    stopClock();
-    if (recorder && recorder.state !== "inactive") {
-      try { recorder.stop(); } catch (_) {}
-    }
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    projects.forEach(project => {
-      if (project.videoUrl) URL.revokeObjectURL(project.videoUrl);
+    $("startCamera").addEventListener("click", startCamera);
+    $("stopCamera").addEventListener("click", async () => {
+      await stopAll();
+      notify("Camera stopped. Saved projects remain in your local library.");
     });
-  });
+    $("startScan").addEventListener("click", startScan);
+    $("stopScan").addEventListener("click", stopScan);
+    $("captureStill").addEventListener("click", captureStill);
 
-  updateCameraUI();
-  renderProjects();
+    $("cameraSelect").addEventListener("change", async () => {
+      if (state.scanActive) { notify("Stop the current scan before changing cameras.", "bad"); return; }
+      if (state.stream) await startCamera();
+    });
+    $("quality").addEventListener("change", async () => {
+      if (state.scanActive) { notify("Stop the current scan before changing resolution.", "bad"); return; }
+      if (state.stream) await startCamera();
+    });
+    $("sampleRate").addEventListener("change", () => {
+      if (!state.scanActive || !state.settings.autoSample) return;
+      clearInterval(state.sampleTimer);
+      state.sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+      notify("Frame sampling interval updated.", "good");
+    });
+    $("videoQuality").addEventListener("change", () => {
+      if (state.scanActive) notify("Video quality changes apply to the next scan.", "good");
+    });
+
+    bindToggle("toggleEdge", "edgeOverlay", () => {
+      if (!state.settings.edgeOverlay) stopEdgeLoop();
+      else if (state.stream) startEdgeLoop();
+    });
+    bindToggle("toggleGuide", "centerGuide", () => {
+      $("centerGuide").classList.toggle("show", state.settings.centerGuide);
+    });
+    bindToggle("toggleSample", "autoSample", () => {
+      updateCameraUI();
+      if (state.scanActive && !state.settings.autoSample) {
+        clearInterval(state.sampleTimer);
+        state.sampleTimer = null;
+        notify("Automatic frame sampling paused.", "good");
+      } else if (state.scanActive && state.settings.autoSample) {
+        state.sampleTimer = setInterval(captureSample, Number($("sampleRate").value));
+        notify("Automatic frame sampling resumed.", "good");
+      }
+    });
+
+    $("clearProjects").addEventListener("click", async () => {
+      if (!state.projects.length) return;
+      if (!confirm("Delete every saved scan project from this browser? Download videos you want to keep first.")) return;
+      try {
+        await dbClear();
+        state.projects = [];
+        renderProjects();
+        notify("All scan projects cleared.", "good");
+      } catch (e) {
+        notify("Could not clear library: " + e.message, "bad");
+      }
+    });
+    $("exportIndex").addEventListener("click", exportLibraryIndex);
+    $("modalClose").addEventListener("click", closeProjectModal);
+    $("projectModal").addEventListener("click", e => {
+      if (e.target.id === "projectModal") closeProjectModal();
+    });
+
+    $("importModel").addEventListener("click", () => $("modelFile").click());
+    $("modelFile").addEventListener("change", e => {
+      const f = e.target.files[0];
+      if (f) loadModelFile(f);
+      e.target.value = "";
+    });
+    $("resetView").addEventListener("click", resetView);
+    $("exportGlb").addEventListener("click", exportGLB);
+    $("clearModel").addEventListener("click", () => {
+      clearCurrentModel();
+      notify("Model cleared.");
+    });
+
+    const dropZone = $("viewerCanvas").parentElement;
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); });
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) loadModelFile(f);
+    });
+
+    window.addEventListener("pagehide", () => {
+      clearInterval(state.sampleTimer);
+      stopClock();
+      stopEdgeLoop();
+      if (state.recorder && state.recorder.state !== "inactive") {
+        try { state.recorder.stop(); } catch (_) {}
+      }
+      if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+      revokeObjectUrls();
+      modalFrameUrls.forEach(u => URL.revokeObjectURL(u));
+    });
+    window.addEventListener("beforeunload", () => {
+      if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+    });
+
+    window.addEventListener("resize", () => {
+      if (state.stream) processEdgeFrame();
+      onViewerResize();
+    });
+  }
+
+  init().catch(e => {
+    console.error(e);
+    notify("S2M failed to initialize: " + e.message, "bad");
+  });
 })();
 </script>
 </body>
